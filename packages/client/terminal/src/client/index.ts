@@ -193,8 +193,9 @@ const MENU_LABEL_WIDTH = 22
 export function renderHintMenu(items: readonly HintItem[], termWidth: number): string[] {
   const shown = items.slice(0, MENU_MAX_ITEMS)
   // Row budgets count display columns (CJK descriptions are two wide), so no
-  // row ever wraps out of the menu and breaks its row geometry.
-  const descBudget = Math.max(6, termWidth - MENU_LABEL_WIDTH - 5)
+  // row ever wraps out of the menu and breaks its row geometry. The budget
+  // also caps at 96 columns: even a very wide window keeps compact rows.
+  const descBudget = Math.max(6, Math.min(96, termWidth - MENU_LABEL_WIDTH - 5))
   const rows = shown.map((item, index) => {
     const label = truncateVisible(item.label, MENU_LABEL_WIDTH).padEnd(MENU_LABEL_WIDTH)
     const description = truncateVisible(item.description ?? '', descBudget)
@@ -216,7 +217,6 @@ export function renderHintMenu(items: readonly HintItem[], termWidth: number): s
 export function apply(ctx: Context, config: TerminalConfig): void {
   const writer = new TerminalWriter(process.stdout)
   const input = new InputReader(process.stdin, writer,  process.stdin.isTTY)
-  const terminalWidth = process.stdout.columns || 80
   let currentPrompt = config.prompt
   let started = false
   const lineListeners = new Set<(line: string) => void | Promise<void>>()
@@ -255,7 +255,12 @@ export function apply(ctx: Context, config: TerminalConfig): void {
   const preLineHooks = new Set<(line: string) => void | Promise<void> | boolean | Promise<boolean>>()
   const service: TerminalService = {
     isTTY: writer.isTTY,
-    width: terminalWidth,
+    // Live columns: a window resize (or a stale boot value) must never leave
+    // rows sized wider than the real screen — a wrapped row breaks the
+    // hint-menu and live-region row geometry.
+    get width() {
+      return process.stdout.columns || 80
+    },
     markdown: new AnsiMarkdown(),
     write: (text) => {
       promptDirty = true
@@ -402,7 +407,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
       if (hintBufferDispose === undefined) {
         hintBufferDispose = input.onBufferChange((line) => {
           const items = hintProvider?.(line) ?? null
-          lastHintMenu = items === null || items.length === 0 ? [] : renderHintMenu(items, terminalWidth)
+          lastHintMenu = items === null || items.length === 0 ? [] : renderHintMenu(items, process.stdout.columns || 80)
           drawHintMenu()
         })
       } else if (provider === undefined) {

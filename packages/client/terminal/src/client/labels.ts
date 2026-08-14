@@ -54,19 +54,26 @@ export function describeToolCall(
   return argsPreview(argsRaw)
 }
 
-/** Characters a terminal renders two columns wide (CJK, fullwidth forms). */
-const WIDE_CHAR = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff01-\uff60\uffe0-\uffe6]/
+/** BMP characters a terminal renders two columns wide (CJK, fullwidth). */
+const WIDE_BMP = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff01-\uff60\uffe0-\uffe6]/
+/** Astral characters a terminal renders two columns wide (emoji blocks). */
+const WIDE_ASTRAL = /[\u{1f000}-\u{1faff}\u{2600}-\u{27bf}]/u
+
+/** Whether one code point renders two columns wide. */
+function isWide(char: string): boolean {
+  return WIDE_BMP.test(char) || WIDE_ASTRAL.test(char)
+}
 
 /**
- * Terminal-column width of plain text (no ANSI escapes), counting CJK and
- * fullwidth glyphs as two columns — the metric box borders and row padding
- * must agree on so no row wraps out of its frame.
+ * Terminal-column width of plain text (no ANSI escapes), counting CJK,
+ * fullwidth, and emoji glyphs as two columns — the metric box borders and
+ * row padding must agree on so no row wraps out of its frame.
  * @param text - plain text.
  * @returns its display width in columns.
  */
 export function visibleWidth(text: string): number {
   let width = 0
-  for (const char of text) width += WIDE_CHAR.test(char) ? 2 : 1
+  for (const char of text) width += isWide(char) ? 2 : 1
   return width
 }
 
@@ -82,7 +89,7 @@ export function truncateVisible(text: string, budget: number): string {
   let out = ''
   let width = 0
   for (const char of text) {
-    const advance = WIDE_CHAR.test(char) ? 2 : 1
+    const advance = isWide(char) ? 2 : 1
     if (width + advance > budget - 1) break
     out += char
     width += advance
