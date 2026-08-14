@@ -81,7 +81,7 @@ export function apply(ctx: Context): void {
       const trimmed = line.trim()
       if (!trimmed.startsWith('/') && !trimmed.startsWith('\\')) return null
       const query = trimmed.slice(1).toLowerCase()
-      if (query === '' && skillItems.length === 0 && !skillsLoading) {
+      if (skillItems.length === 0 && !skillsLoading) {
         const current = sessions.list.getSnapshot().current
         if (current !== undefined) {
           skillsLoading = true

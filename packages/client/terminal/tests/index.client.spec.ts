@@ -115,6 +115,14 @@ describe('terminal kernel plugin', () => {
     }
   })
 
+  it('keeps CJK descriptions inside the row budget by display width', () => {
+    const lines = renderHintMenu([{ label: '/skill', description: '基于中文描述'.repeat(20) }], 40)
+    for (const line of lines) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(40)
+    }
+    expect(lines[0]).toContain('…')
+  })
+
   it('dispatches node renderers with fallback and single ownership', () => {
     const { terminal } = boot()
     const rendered: unknown[] = []

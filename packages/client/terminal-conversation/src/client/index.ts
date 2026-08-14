@@ -203,12 +203,15 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed:
       if (text === '') return
       const provenance = node.provenance as { role?: string; label?: string | null } | undefined
       const marker = provenance?.role === 'recall' ? '↩ ' : '▸ '
-      const label = provenance?.label == null || provenance.label === '' ? '' : provenance.label + ': '
+      const labelRaw = provenance?.label == null || provenance.label === '' ? '' : provenance.label
+      // Long producer labels and wide terminals stay compact: the label caps,
+      // the teaser caps, and the row never grows past the terminal width.
+      const label = labelRaw === '' ? '' : truncateVisible(labelRaw, 28) + ': '
       const lines = text.split('\n')
       const first = lines.shift() ?? ''
       const more = lines.length
-      const budget = Math.max(20, terminal.width - marker.length - label.length - 10)
-      const teaser = first.length > budget ? first.slice(0, budget - 1) + '…' : first
+      const budget = Math.min(72, Math.max(20, terminal.width - marker.length - label.length - 12))
+      const teaser = truncateVisible(first, budget)
       const tail = more > 0 ? '  (+' + String(more) + ' more lines)' : ''
       terminal.print(ansiEnabled ? dsDim(marker + label + teaser + tail) : marker + label + teaser + tail)
       return

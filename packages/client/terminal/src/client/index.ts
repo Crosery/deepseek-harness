@@ -14,6 +14,7 @@ import { AnsiMarkdown } from './markdown.ts'
 import { TerminalWriter } from './output.ts'
 import { InputReader } from './input.ts'
 import { dsBlue, dsDim } from './ansi.ts'
+import { truncateVisible } from './labels.ts'
 
 export { ansiEnabled, sgr, SGR, dsBlue, dsDim, dsGreen, dsRed, dsSoftBlue, rgb } from './ansi.ts'
 export { AnsiMarkdown } from './markdown.ts'
@@ -191,10 +192,12 @@ const MENU_LABEL_WIDTH = 22
  */
 export function renderHintMenu(items: readonly HintItem[], termWidth: number): string[] {
   const shown = items.slice(0, MENU_MAX_ITEMS)
-  const descBudget = Math.max(6, termWidth - MENU_LABEL_WIDTH - 4)
+  // Row budgets count display columns (CJK descriptions are two wide), so no
+  // row ever wraps out of the menu and breaks its row geometry.
+  const descBudget = Math.max(6, termWidth - MENU_LABEL_WIDTH - 5)
   const rows = shown.map((item, index) => {
-    const label = item.label.padEnd(MENU_LABEL_WIDTH)
-    const description = (item.description ?? '').slice(0, descBudget)
+    const label = truncateVisible(item.label, MENU_LABEL_WIDTH).padEnd(MENU_LABEL_WIDTH)
+    const description = truncateVisible(item.description ?? '', descBudget)
     const selected = index === 0
     return (selected ? dsBlue('>') : ' ') + ' ' + (selected ? dsBlue(label) : dsDim(label)) + ' ' + dsDim(description)
   })
@@ -222,6 +225,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
   let commandBusy = 0
   let hintProvider: ((line: string) => readonly HintItem[] | null) | undefined
   let hintLines = 0
+  let lastHintMenu: string[] = []
   let hintBufferDispose: (() => void) | undefined
   let promptDirty = false
   let promptRedrawTimer: ReturnType<typeof setTimeout> | undefined
@@ -235,6 +239,18 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     for (let index = 0; index < hintLines; index += 1) bytes += '\r\u001b[K\u001b[1B'
     writer.raw(bytes + '\u001b8')
     hintLines = 0
+  }
+  // The menu redraws from the last computed rows: readline's prompt redraw
+  // erases below the input line, so the hint survives by repainting after it.
+  const drawHintMenu = (): void => {
+    clearHint()
+    if (lastHintMenu.length === 0 || !writer.isTTY) return
+    hintLines = lastHintMenu.length
+    let bytes = '\u001b7\u001b[1B'
+    for (const menuLine of lastHintMenu) {
+      bytes += '\r\u001b[K' + menuLine + '\u001b[1B'
+    }
+    writer.raw(bytes + '\u001b8')
   }
   const preLineHooks = new Set<(line: string) => void | Promise<void> | boolean | Promise<boolean>>()
   const service: TerminalService = {
@@ -304,7 +320,10 @@ export function apply(ctx: Context, config: TerminalConfig): void {
         clearTimeout(promptRedrawTimer)
         promptRedrawTimer = undefined
       }
-      if (started) input.setPrompt(text)
+      if (started) {
+        input.setPrompt(text)
+        drawHintMenu()
+      }
     },
     registerNodeRenderer: (kind, renderer) => {
       if (nodeRenderers.has(kind)) {
@@ -352,6 +371,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
       promptRedrawTimer = setTimeout(() => {
         promptRedrawTimer = undefined
         input.setPrompt(currentPrompt)
+        drawHintMenu()
       }, 25)
     },
     onLine: (listener) => {
@@ -382,16 +402,8 @@ export function apply(ctx: Context, config: TerminalConfig): void {
       if (hintBufferDispose === undefined) {
         hintBufferDispose = input.onBufferChange((line) => {
           const items = hintProvider?.(line) ?? null
-          if (!writer.isTTY) return
-          clearHint()
-          if (items === null || items.length === 0) return
-          const menu = renderHintMenu(items, terminalWidth)
-          hintLines = menu.length
-          let bytes = '\u001b7\u001b[1B'
-          for (const menuLine of menu) {
-            bytes += '\r\u001b[K' + menuLine + '\u001b[1B'
-          }
-          writer.raw(bytes + '\u001b8')
+          lastHintMenu = items === null || items.length === 0 ? [] : renderHintMenu(items, terminalWidth)
+          drawHintMenu()
         })
       } else if (provider === undefined) {
         clearHint()
