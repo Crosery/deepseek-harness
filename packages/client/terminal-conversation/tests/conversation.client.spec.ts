@@ -11,6 +11,7 @@ function stubTerminal(tty = false) {
   const closes: (() => void)[] = []
   const dispatches: string[] = []
   const faceCommands: string[] = []
+  const commands = new Map<string, () => void>()
   return {
     output,
     terminal: {
@@ -25,11 +26,16 @@ function stubTerminal(tty = false) {
       refreshPrompt: () => {},
       registerNodeRenderer: () => () => {},
       renderNode: () => false,
-      registerCommand: () => () => {},
+      registerCommand: (name: string, handler: () => void) => {
+        commands.set(name, handler)
+        return () => { commands.delete(name) }
+      },
       dispatchCommand: (line: string) => { dispatches.push(line); return false },
       busy: () => false,
       nextLine: () => { output.push('<NL>') },
       clearLine: () => { output.push('<CLR>') },
+      rewriteRegion: (regionLines: readonly string[]) => { output.push(...regionLines) },
+      clearRegion: () => { output.push('<REGION-CLR>') },
       onLine: (listener: (line: string) => void | Promise<void>) => { lines.push(listener); return () => {} },
       onSigint: (listener: () => void) => { sigints.push(listener); return () => {} },
       onClose: (listener: () => void) => { closes.push(listener); return () => {} },
@@ -40,6 +46,7 @@ function stubTerminal(tty = false) {
     closes,
     dispatches,
     faceCommands,
+    commands,
   }
 }
 
@@ -243,7 +250,7 @@ describe('terminal-conversation plugin', () => {
     expect(stub.output.join('|')).toContain('second')
   })
 
-  it('keeps streamed reasoning behind the pulse and renders it dimmed at settle', async () => {
+  it('keeps streamed reasoning behind the pulse and folds it at settle by default', async () => {
     const { stub, setCurrent, emit } = await boot({ task: undefined })
     setCurrent('session-1')
     emit({
@@ -267,6 +274,11 @@ describe('terminal-conversation plugin', () => {
       partial: null,
       running: false,
     })
+    // tail mode (default) folds the settled reasoning into a summary row
+    expect(stub.output.join('')).toContain('· thinking · 1 line · /think expands')
+    expect(stub.output.join('')).not.toContain('· thinking now')
+    // /think expands it once, printing every line
+    stub.commands.get('think')?.()
     expect(stub.output.join('')).toContain('· thinking now')
   })
 
@@ -296,6 +308,8 @@ describe('terminal-conversation plugin', () => {
       running: true,
     })
     expect(stub.output.join('')).toContain('thinking…')
+    // the live region shows the newest reasoning line under the pulse
+    expect(stub.output.join('')).toContain('· mulling')
     emit({
       partial: null,
       running: true,
@@ -312,7 +326,7 @@ describe('terminal-conversation plugin', () => {
     })
     expect(stub.output.join('')).toContain('read: a.ts')
     emit({ partial: null, running: false, runningCalls: [] })
-    expect(stub.output).toContain('<CLR>')
+    expect(stub.output).toContain('<REGION-CLR>')
   })
 
   it('prints the welcome box for a blank interactive session with the active model', async () => {

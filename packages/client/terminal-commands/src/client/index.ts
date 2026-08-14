@@ -47,6 +47,7 @@ export function apply(ctx: Context): void {
     model: { summary: 'pick provider/model (/model, or /model <n> to apply the nth choice)' },
     skills: { summary: 'list the session skill catalog' },
     settings: { summary: 'list settings namespaces' },
+    think: { summary: 'toggle thinking display (live tail ↔ full)' },
     memory: { summary: 'report process memory (RSS, heap, external)' },
     quit: { summary: 'exit the terminal session' },
   }

@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, describeToolCall, dsBlue, dsDim, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, describeToolCall, dsBlue, dsDim, dsGreen, dsRed, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-tool'
@@ -104,7 +104,7 @@ function renderCallRow(terminal: TerminalService, block: ToolCallBlock, depth: n
   const label = describeToolCall(node.call?.argsRaw ?? '', node.callView)
   const head = indent + (node.isError ? '✗' : '✓') + ' ' + name + (label === '' ? '' : ': ' + label) + durationOf(node)
   terminal.print(ansiEnabled
-    ? indent + (node.isError ? sgr(SGR.brightRed, '✗') : dsBlue('✓')) + ' ' + dsBlue(name)
+    ? indent + (node.isError ? dsRed('✗') : dsGreen('✓')) + ' ' + dsBlue(name)
       + (label === '' ? '' : ': ' + dsDim(label)) + dsDim(durationOf(node))
     : head)
   const error = node.error
@@ -146,7 +146,7 @@ export function apply(ctx: Context): void {
       if (outcome === null || outcome === undefined || outcome.text === undefined || outcome.text === '') return
       const line = (outcome.kind === 'error' ? '✗ ' : '✓ ') + outcome.text
       terminal.print(ansiEnabled
-        ? (outcome.kind === 'error' ? sgr(SGR.brightRed, line) : dsDim(line))
+        ? (outcome.kind === 'error' ? dsRed(line) : dsGreen(line))
         : line)
     }),
     'terminal-tool: command renderer',

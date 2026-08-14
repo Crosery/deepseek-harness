@@ -32,6 +32,8 @@ describe('terminal kernel plugin', () => {
     expect(typeof terminal.setHintProvider).toBe('function')
     expect(typeof terminal.nextLine).toBe('function')
     expect(typeof terminal.clearLine).toBe('function')
+    expect(typeof terminal.rewriteRegion).toBe('function')
+    expect(typeof terminal.clearRegion).toBe('function')
     expect(terminal.markdown).toBeDefined()
   })
 

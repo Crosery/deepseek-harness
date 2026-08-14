@@ -15,7 +15,7 @@ import { TerminalWriter } from './output.ts'
 import { InputReader } from './input.ts'
 import { dsBlue, dsDim } from './ansi.ts'
 
-export { ansiEnabled, sgr, SGR, dsBlue, dsDim, rgb } from './ansi.ts'
+export { ansiEnabled, sgr, SGR, dsBlue, dsDim, dsGreen, dsRed, dsSoftBlue, rgb } from './ansi.ts'
 export { AnsiMarkdown } from './markdown.ts'
 export { subscribeCurrentSession } from './session-binding.ts'
 export { renderBanner } from './welcome.ts'
@@ -134,6 +134,15 @@ export interface TerminalService {
   /** Clear the current line in place (the cursor stays put). */
   clearLine(): void
   /**
+   * Rewrite the in-place live region at the transcript bottom (the thinking
+   * pulse plus its reasoning tail): clears the previously drawn rows and
+   * redraws the given lines, tracking the row count across calls.
+   * @param lines - the new region lines, top to bottom.
+   */
+  rewriteRegion(lines: readonly string[]): void
+  /** Clear the tracked live region and return the cursor to its first row. */
+  clearRegion(): void
+  /**
    * Set the live command-hint provider: called on every current-line change;
    * a returned item list renders as a popup menu under the input, null clears
    * it. Both '/' and '\' begin a command line.
@@ -216,6 +225,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
   let hintBufferDispose: (() => void) | undefined
   let promptDirty = false
   let promptRedrawTimer: ReturnType<typeof setTimeout> | undefined
+  let regionLines = 0
   // The hint menu borrows omp's select-list look: a dim rounded box under the
   // input, a blue cursor on the first match, dim descriptions, and a dim
   // footer. Readline keeps owning the editor; the menu only ever previews.
@@ -256,6 +266,36 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     clearLine: () => {
       clearHint()
       writer.clearLine()
+    },
+    rewriteRegion: (lines) => {
+      if (!writer.isTTY || lines.length === 0) return
+      promptDirty = true
+      let bytes = regionLines > 0 ? '\u001b[' + String(regionLines - 1) + 'A' : ''
+      for (let index = 0; index < lines.length; index += 1) {
+        bytes += '\r\u001b[K' + (lines[index] ?? '')
+        if (index < lines.length - 1) bytes += '\u001b[1B'
+      }
+      // A shrunken region clears its stale lower rows; the cursor ends on the
+      // old bottom row so the next rewrite's move-up math stays valid.
+      for (let index = lines.length; index < regionLines; index += 1) {
+        bytes += '\u001b[1B\r\u001b[K'
+      }
+      regionLines = lines.length
+      writer.raw(bytes)
+    },
+    clearRegion: () => {
+      if (regionLines === 0 || !writer.isTTY) return
+      const count = regionLines
+      regionLines = 0
+      if (count === 1) {
+        writer.raw('\r\u001b[K')
+        return
+      }
+      let bytes = '\u001b[' + String(count - 1) + 'A'
+      for (let index = 0; index < count - 1; index += 1) {
+        bytes += '\r\u001b[K\u001b[1B'
+      }
+      writer.raw(bytes + '\r\u001b[K\u001b[' + String(count - 1) + 'A')
     },
     setPrompt: (text) => {
       currentPrompt = text

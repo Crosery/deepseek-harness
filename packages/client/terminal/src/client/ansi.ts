@@ -38,11 +38,20 @@ export function sgr(code: number, text: string): string {
 /** Whether ANSI output is enabled for this process. */
 export const ansiEnabled =  process.stdout.isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'
 
-/** The DeepSeek brand blue (RGB). */
+/** The DeepSeek brand blue (RGB): accents, cursors, and the prompt. */
 export const DEEPSEEK_BLUE = { r: 77, g: 107, b: 254 } as const
 
-/** A lighter reading blue for dimmed/secondary text. */
+/** A muted slate gray for secondary/dimmed text, following omp's muted tone. */
+export const DEEPSEEK_GRAY = { r: 136, g: 144, b: 164 } as const
+
+/** A lighter reading blue kept for blue-adjacent secondary accents. */
 export const DEEPSEEK_BLUE_SOFT = { r: 128, g: 148, b: 255 } as const
+
+/** Success green for ✓ rows and positive outcomes. */
+export const DEEPSEEK_GREEN = { r: 74, g: 222, b: 128 } as const
+
+/** Error red for ✗ rows and failures. */
+export const DEEPSEEK_RED = { r: 248, g: 113, b: 113 } as const
 
 /**
  * Wrap text in a truecolor foreground.
@@ -66,10 +75,38 @@ export function dsBlue(text: string): string {
 }
 
 /**
- * Wrap text in the soft DeepSeek blue when colors are on (secondary text).
+ * Wrap text in the muted slate gray when colors are on (secondary text:
+ * thinking, context, footers, borders — anything that should recede).
  * @param text - the text to color.
  * @returns the colored text (or the plain text without a TTY).
  */
 export function dsDim(text: string): string {
+  return ansiEnabled ? rgb(DEEPSEEK_GRAY.r, DEEPSEEK_GRAY.g, DEEPSEEK_GRAY.b, text) : text
+}
+
+/**
+ * Wrap text in the soft DeepSeek blue when colors are on.
+ * @param text - the text to color.
+ * @returns the colored text (or the plain text without a TTY).
+ */
+export function dsSoftBlue(text: string): string {
   return ansiEnabled ? rgb(DEEPSEEK_BLUE_SOFT.r, DEEPSEEK_BLUE_SOFT.g, DEEPSEEK_BLUE_SOFT.b, text) : text
+}
+
+/**
+ * Wrap text in the success green when colors are on.
+ * @param text - the text to color.
+ * @returns the colored text (or the plain text without a TTY).
+ */
+export function dsGreen(text: string): string {
+  return ansiEnabled ? rgb(DEEPSEEK_GREEN.r, DEEPSEEK_GREEN.g, DEEPSEEK_GREEN.b, text) : text
+}
+
+/**
+ * Wrap text in the error red when colors are on.
+ * @param text - the text to color.
+ * @returns the colored text (or the plain text without a TTY).
+ */
+export function dsRed(text: string): string {
+  return ansiEnabled ? rgb(DEEPSEEK_RED.r, DEEPSEEK_RED.g, DEEPSEEK_RED.b, text) : text
 }

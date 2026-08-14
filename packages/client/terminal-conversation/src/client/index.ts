@@ -96,8 +96,22 @@ function usageFooter(node: AssistantMessageNode): string | null {
   return parts.length === 0 ? null : parts.join(' · ')
 }
 
-/** Render one finalized conversation node. */
-function renderNode(terminal: TerminalService, node: ConversationNode, streamed?: StreamedState): void {
+/** Mutable per-session rendering context threaded from the plugin body. */
+interface RenderContext {
+  /** Current thinking display mode (tail collapses settled reasoning). */
+  thinkingFull: boolean
+  /** Last settled reasoning text, printed once when /think expands later. */
+  lastReasoning: string | null
+}
+
+/**
+ * Render one finalized conversation node.
+ * @param terminal - the output seam.
+ * @param node - the node.
+ * @param streamed - streamed-partial bookkeeping for duplicate suppression.
+ * @param context - the mutable per-session rendering context.
+ */
+function renderNode(terminal: TerminalService, node: ConversationNode, streamed: StreamedState | undefined, context: RenderContext): void {
   // Feature plugins own their node kinds (the terminal slot mechanism)
   // the built-ins below render whatever remains.
   if (terminal.renderNode(node.kind, node)) return
@@ -123,13 +137,21 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
           }
           if (text !== '') renderBlock(terminal, text)
         } else if (block.kind === 'reasoning') {
-          // The settled reasoning renders dimmed, one · line per source line
-          // (the live stream only ever showed the pulse, so nothing repeats).
+          // Settled reasoning: the live stream showed the newest lines, so
+          // the full text never repeats. Tail mode (default) folds it into a
+          // dim summary row; full mode prints every line dimmed.
           const reasoning = block.text.replace(/^\n+/, '').replace(/\n+$/, '')
-          if (reasoning !== '') {
+          if (reasoning === '') continue
+          if (context.thinkingFull) {
             for (const line of reasoning.split('\n')) {
               terminal.print(ansiEnabled ? dsDim('· ' + line) : '· ' + line)
             }
+          } else {
+            const count = reasoning.split('\n').length
+            terminal.print(ansiEnabled
+              ? dsDim('· thinking · ' + String(count) + (count === 1 ? ' line' : ' lines') + ' · /think expands')
+              : '· thinking · ' + String(count) + (count === 1 ? ' line' : ' lines') + ' · /think expands')
+            context.lastReasoning = reasoning
           }
         }
       }
@@ -237,13 +259,17 @@ export function apply(ctx: Context): void {
   let closing = false
   let workPending = false
 
-  // The live activity line borrows omp's tool-activity region: a braille
-  // pulse labeled "thinking…" while the model reasons, then the running tool
-  // calls while they execute. Visible text streaming owns the line instead;
-  // piped runs print one dim pending row per call (no animation).
+  // The live activity region borrows omp's tool-activity and thinking
+  // panels: a braille pulse line labeled "thinking…" with the live reasoning
+  // beneath it (default: the newest three lines; /think switches to the full
+  // stream), then the running tool calls while they execute. Visible text
+  // streaming owns the line instead; piped runs print one dim pending row
+  // per call (no animation).
   const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-  let liveOn = false
-  let liveLabel = ''
+  const THINKING_TAIL_LINES = 3
+  let thinkingMode: 'tail' | 'full' = 'tail'
+  const renderContext: RenderContext = { thinkingFull: false, lastReasoning: null }
+  let liveState: { label: string; reasoningText: string } | null = null
   let liveFrame = 0
   let liveTimer: ReturnType<typeof setInterval> | undefined
   let seenRunningCalls = new Set<string>()
@@ -253,44 +279,73 @@ export function apply(ctx: Context): void {
     const label = describeToolCall(call.argsRaw, call.callView)
     return label === '' ? '' : ': ' + label
   }
-  const liveLabelFor = (snapshot: ConversationSnapshot): string | null => {
+  const reasoningLinesOf = (text: string): string[] => {
+    const trimmed = text.replace(/^\n+/, '').replace(/\n+$/, '')
+    if (trimmed === '') return []
+    const budget = Math.max(20, terminal.width - 4)
+    const lines = trimmed.split('\n').map(line => line.length > budget ? line.slice(0, budget - 1) + '…' : line)
+    return thinkingMode === 'full' ? lines : lines.slice(-THINKING_TAIL_LINES)
+  }
+  const liveStateFor = (snapshot: ConversationSnapshot): { label: string; reasoningText: string } | null => {
     if (snapshot.partial !== null) {
       const text = textOf(snapshot.partial.blocks)
       const reasoning = reasoningOf(snapshot.partial.blocks)
-      if (text === '' && reasoning.trim() !== '') return 'thinking…'
+      if (text === '' && reasoning.trim() !== '') {
+        return { label: 'thinking…', reasoningText: reasoning }
+      }
       return null
     }
     if (snapshot.runningCalls.length > 0) {
       const shown = snapshot.runningCalls.slice(0, 2).map(call => call.name + callSuffix(call))
       const more = snapshot.runningCalls.length - shown.length
-      return shown.join('  ·  ') + (more > 0 ? '  ·  +' + String(more) : '')
+      return { label: shown.join('  ·  ') + (more > 0 ? '  ·  +' + String(more) : ''), reasoningText: '' }
     }
     return null
   }
   const paintLive = (): void => {
+    const state = liveState
+    if (state === null) return
     const frame = SPINNER_FRAMES[liveFrame % SPINNER_FRAMES.length] ?? '⠋'
     liveFrame += 1
-    terminal.stream(dsBlue(frame) + ' ' + dsDim(liveLabel))
+    const lines = [dsBlue(frame) + ' ' + dsDim(state.label)]
+    for (const line of reasoningLinesOf(state.reasoningText)) {
+      lines.push(dsDim('· ' + line))
+    }
+    terminal.rewriteRegion(lines)
   }
   const stopLive = (): void => {
-    if (!liveOn) return
-    liveOn = false
+    if (liveState === null) return
+    liveState = null
     if (liveTimer !== undefined) {
       clearInterval(liveTimer)
       liveTimer = undefined
     }
-    terminal.clearLine()
+    terminal.clearRegion()
   }
-  const ensureLive = (label: string): void => {
+  const ensureLive = (state: { label: string; reasoningText: string }): void => {
     if (!terminal.isTTY) return
-    if (!liveOn) {
-      liveOn = true
-      liveLabel = label
+    if (liveState === null) {
+      liveState = state
       paintLive()
       liveTimer = setInterval(paintLive, 80)
-    } else if (liveLabel !== label) {
-      liveLabel = label
+    } else if (liveState.label !== state.label || liveState.reasoningText !== state.reasoningText) {
+      liveState = state
       paintLive()
+    }
+  }
+  const toggleThinking = (): void => {
+    thinkingMode = thinkingMode === 'tail' ? 'full' : 'tail'
+    terminal.status(ansiEnabled
+      ? dsDim('thinking display: ' + (thinkingMode === 'full' ? 'full (all lines)' : 'live tail'))
+      : 'thinking display: ' + (thinkingMode === 'full' ? 'full (all lines)' : 'live tail'))
+    // A live reasoning stream repaints immediately in the new mode; a
+    // settled block reprints once when expanding (printed rows cannot fold).
+    if (liveState !== null && liveState.reasoningText !== '') paintLive()
+    if (thinkingMode === 'full' && renderContext.lastReasoning !== null) {
+      for (const line of renderContext.lastReasoning.split('\n')) {
+        terminal.print(ansiEnabled ? dsDim('· ' + line) : '· ' + line)
+      }
+      renderContext.lastReasoning = null
     }
   }
 
@@ -358,8 +413,9 @@ export function apply(ctx: Context): void {
     const snapshot: ConversationSnapshot = face.getSnapshot()
     // Stop the live line before anything prints so settled cards land on the
     // cleared line; the label restarts below afterwards when work continues.
-    const live = liveLabelFor(snapshot)
+    const live = liveStateFor(snapshot)
     if (live === null) stopLive()
+    renderContext.thinkingFull = thinkingMode === 'full'
     const nodes = snapshot.nodes
     for (let index = printedNodes; index < nodes.length; index += 1) {
       const node = nodes[index] as ConversationNode
@@ -376,7 +432,7 @@ export function apply(ctx: Context): void {
       } else if (node.kind !== 'context') {
         afterHuman = false
       }
-      renderNode(terminal, node, streamed)
+      renderNode(terminal, node, streamed, renderContext)
       transcriptHasContent = true
     }
     printedNodes = nodes.length
@@ -521,6 +577,10 @@ export function apply(ctx: Context): void {
   bindSession(sessions.list.getSnapshot().current)
 
   if (startup.task === undefined) {
+    // /think toggles the thinking display between the live tail (default)
+    // and the full stream; the hint directory lists it with the client
+    // commands even though the handler lives here, where the mode state is.
+    ctx.effect(() => terminal.registerCommand('think', () => { toggleThinking() }), 'terminal-conversation: /think')
     terminal.onLine(line => handleLine(line))
     terminal.onSigint(() => {
       if (currentId === undefined) return

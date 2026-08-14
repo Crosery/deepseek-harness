@@ -21,13 +21,13 @@ Approval and ask_user_question prompts render inline and switch the input line i
 
 ## Display
 
-A blank interactive session opens with a welcome box: the pixel whale, the active model, and the command hints. While the model reasons, the input line shows a pulsing `⠋ thinking…` instead of the raw reasoning stream; the settled reasoning prints once, dimmed with a `·` prefix, and the answer streams line by line in place.
+A blank interactive session opens with a welcome box: the pixel whale, the active model, and the command hints. While the model reasons, a pulsing `⠋ thinking…` line shows the newest reasoning lines live beneath it (the default tail mode); the settled reasoning folds into a dim summary row (`· thinking · 23 lines · /think expands`). `/think` toggles between the live tail and the full stream — expanded blocks print every line dimmed with a `·` prefix — and the answer streams line by line in place.
 
 Typing `/` or `\` opens the live command menu under the input: client commands, host commands, and the session's skills, filtered as you type, with the cursor on the first match and descriptions beside each entry. `⏎` runs the line; both prefixes dispatch identically.
 
 Tool calls render like the web: a live braille activity line while they run (one dim pending row per call in piped runs), then an omp-style card — `✓ name: label · 0.5s` with a dimmed preview of the render-intent output (terminal text, diff hunks, search matches, read content, web output) and nested subcalls indented below. Command outcomes print under their `⌘` line as `✓`/`✗` rows.
 
-Steered messages appear as user rows with a `↪` marker, injected or recalled context as collapsed dim `▸`/`↩` rows (the first content line plus a count of the rest) with the producer label, and model retries as dim `↻` notices. Each assistant message ends with a dim footer — `↑ 8.8k ↓ 63 · 2.0s · ttft 1.0s` — the billed tokens, latency, and time-to-first-token, like the web's stats and omp's footer. The human block (message plus its context rows) and the model block (pulse, answer, footer) are separated by a blank line, so each turn reads as its own block.
+Steered messages appear as user rows with a `↪` marker, injected or recalled context as collapsed dim `▸`/`↩` rows (the first content line plus a count of the rest) with the producer label, and model retries as dim `↻` notices. Each assistant message ends with a dim footer — `↑ 8.8k ↓ 63 · 2.0s · ttft 1.0s` — the billed tokens, latency, and time-to-first-token, like the web's stats and omp's footer. The human block (message plus its context rows) and the model block (pulse, answer, footer) are separated by a blank line, so each turn reads as its own block. Colors follow omp's palette: brand blue for the prompt, user marker, and tool names; green `✓` and red `✗` for outcomes; slate gray for thinking, context, footers, and borders.
 
 ## Memory
 

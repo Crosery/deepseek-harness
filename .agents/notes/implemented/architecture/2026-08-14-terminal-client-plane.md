@@ -27,7 +27,7 @@ The conversation-node definitions and chat snapshot builder moved from `packages
 
 ## Feature parity (all web agent features, terminal-rendered)
 
-- conversation (streaming markdown in place, a thinking pulse while reasoning streams, settled dim reasoning rows, queue replay, resume)
+- conversation (streaming markdown in place, a live thinking panel — pulse line plus the newest reasoning lines, `/think` toggling tail ↔ full display — settled reasoning folded or expanded, queue replay, resume)
 - live command hints: typing / or \ opens a filtered menu under the input (client commands, host commands, session skills), cursor on the first match, descriptions beside each row; both prefixes dispatch identically
 - tool cards: a live braille activity line while calls run (one dim pending row per call in piped runs), then an omp-style `✓ name: label · 0.5s` card with the render-intent preview (terminal/diff/search/read/web/generic) and nested subcalls indented below
 - approvals + ask_user_question inline prompts (answer-mode input)
@@ -45,7 +45,7 @@ The transcript is line-oriented, not a full-screen TUI: the kernel owns the sing
 
 Streaming partials rewrite in place: the streamed tail is always the full current line, and a delta first piece completes the previous line as `previousTail + piece` — never the lone fragment, which would erase the accumulated prefix on the next clear. Empty delta lines advance the cursor without printing a cleared blank row.
 
-Tool activity rides one shared live line: `liveLabelFor(snapshot)` picks `thinking…` while a reasoning partial streams, then the running calls from `snapshot.runningCalls` (`describeToolCall` in the terminal kernel builds the label from the call view title or the salient argument). The line stops before nodes print so settled cards land on the cleared row; piped runs record each call once as a dim pending row instead.
+The live activity region (kernel `rewriteRegion`/`clearRegion` seat) borrows omp's tool-activity and thinking panels: a braille pulse line plus the live reasoning under it — `liveStateFor(snapshot)` picks `thinking…` with the reasoning text while a reasoning partial streams (tail mode shows the newest three lines, `/think` toggles to the full stream), then the running calls from `snapshot.runningCalls` (`describeToolCall` in the terminal kernel builds the label from the call view title or the salient argument). The region stops before nodes print so settled cards land on the cleared rows; piped runs record each call once as a dim pending row instead. Settled reasoning folds to a dim summary row in tail mode and stores its text for a later `/think` expand. Colors follow omp's palette: brand blue accents, green ✓/red ✗ outcomes, slate gray for thinking/context/footers/borders.
 
 Turns render as separate blocks: user/steering rows start a human block (a blank line after the previous model block), context rows attach inside it collapsed to one teaser line, and the first assistant row closes it with one blank line. The kernel debounces the prompt redraw by 25 ms so a burst of settled rows does not flash the prompt between them.
 
