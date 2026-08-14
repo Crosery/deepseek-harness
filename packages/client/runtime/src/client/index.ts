@@ -35,6 +35,23 @@ export type {
   ConversationViewSnapshotStore, StepLocation, TurnLocation,
 } from './contract/conversation.ts'
 export type { ConversationRuntime } from './sessions/conversation-assembler.ts'
+export { registerConversationChat } from './chat/register.ts'
+export type {
+  AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, FinalAssistantChatData,
+  ManualCompactionChatData, RetryChatData, ToolChatData, TurnTailChatData,
+} from './chat/chat-nodes.ts'
+export { isRunningTool, isSettledTool } from './chat/chat-nodes.ts'
+export { assistantStepReading, deriveTurnMetrics } from './chat/turn-metrics.ts'
+export type {} from './chat/assistant.ts'
+export type {} from './chat/command.ts'
+export type {} from './chat/compaction.ts'
+export type {} from './chat/fallback.ts'
+export type {} from './chat/message.ts'
+export type {} from './chat/retry.ts'
+export type {} from './chat/tool.ts'
+export type {} from './chat/turn-error.ts'
+export type {} from './chat/turn-max-tokens.ts'
+export type {} from './chat/turn-tail.ts'
 export type { RootOwnerProps } from './slots.ts'
 export { SessionCreateError, SessionRuntime, scopeOf, workspaceTitleOf } from './sessions/service.ts'
 export { indexSubagentDescendants } from './sessions/subagent-lineage.ts'

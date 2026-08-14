@@ -9,8 +9,8 @@ import { ConversationNodeAssembler } from '@deepseek-ai/dsh-client-runtime/clien
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import type { SessionEvent } from '@deepseek-ai/dsh-session/types'
-import { commandDefinition } from '@deepseek-ai/dsh-client-ui-conversation/src/client/conversation-nodes/command.ts'
-import { chatViewDefinition } from '@deepseek-ai/dsh-client-ui-conversation/src/client/conversation-nodes/chat-snapshot-builder.ts'
+import { commandDefinition } from '@deepseek-ai/dsh-client-runtime/src/client/chat/command.ts'
+import { chatViewDefinition } from '@deepseek-ai/dsh-client-runtime/src/client/chat/chat-snapshot-builder.ts'
 import { GoalCommandInputView } from '../src/client/GoalCommandInputView.tsx'
 import {
   goalCommandInputDefinition, goalCommandText,

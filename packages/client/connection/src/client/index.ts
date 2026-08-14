@@ -36,8 +36,12 @@ export {
   transportError,
 } from './api.ts'
 
-// Connection loop types are public through ConnectionHandle.start; the
-// controller remains package-internal.
+// Connection loop types are public through ConnectionHandle.start. The
+// controller class is exported for Node-resident client planes (the terminal
+// platform) that run the same connect/pump/reconnect loop over an in-process
+// transport; browser bundles do not import it.
+export { ConnectionController } from './connection.ts'
+
 export type { ConnectionConfig, ConnectionSinks, ConnectionState }
 export type { ClientConnectionRpc } from '../rpc.ts'
 

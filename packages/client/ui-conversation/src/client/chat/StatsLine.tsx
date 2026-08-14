@@ -11,7 +11,7 @@ import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type { ComposerBarProps } from '../contract/slots.ts'
 import { formatTokensPerSecond } from './message-chrome.ts'
-import { assistantStepReading } from './turn-metrics.ts'
+import { assistantStepReading } from '@deepseek-ai/dsh-client-runtime/client'
 import css from './StatsLine.module.css'
 
 interface WindowStats {

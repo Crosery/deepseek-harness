@@ -46,7 +46,10 @@ declare module '@deepseek-ai/cordis' {
 /** package.json `dsh.client` declaration fields, validated one by one after reading the file. */
 interface DshClientDeclaration {
   inject?: string[]
-  platform: string
+  /** Legacy single-platform declaration; read together with `platforms`. */
+  platform?: string
+  /** Platforms this client half serves (web browser, terminal, …). */
+  platforms?: string[]
   /** Boot phase-one prefetch mark; absent means lazy (fetched on demand). */
   immediately?: boolean
 }
@@ -112,8 +115,14 @@ function parseDshClient(pkgName: string, value: unknown): DshClientDeclaration |
     throw new Error(`client-modules: ${pkgName} has a non-object dsh.client declaration`)
   }
   const decl = value as Record<string, unknown>
-  if (typeof decl.platform !== 'string') {
+  if (decl.platform !== undefined && typeof decl.platform !== 'string') {
     throw new Error(`client-modules: ${pkgName} dsh.client.platform must be a string`)
+  }
+  if (decl.platforms !== undefined && (!Array.isArray(decl.platforms) || decl.platforms.some(i => typeof i !== 'string'))) {
+    throw new Error(`client-modules: ${pkgName} dsh.client.platforms must be a string array`)
+  }
+  if (decl.platform === undefined && decl.platforms === undefined) {
+    throw new Error(`client-modules: ${pkgName} dsh.client must declare platform or platforms`)
   }
   if (decl.inject !== undefined && (!Array.isArray(decl.inject) || decl.inject.some(i => typeof i !== 'string'))) {
     throw new Error(`client-modules: ${pkgName} dsh.client.inject must be a string array`)
@@ -122,7 +131,8 @@ function parseDshClient(pkgName: string, value: unknown): DshClientDeclaration |
     throw new Error(`client-modules: ${pkgName} dsh.client.immediately must be a boolean`)
   }
   return {
-    platform: decl.platform,
+    ...(decl.platform !== undefined ? { platform: decl.platform } : {}),
+    ...(decl.platforms !== undefined ? { platforms: decl.platforms as string[] } : {}),
     ...(decl.inject !== undefined ? { inject: decl.inject as string[] } : {}),
     ...(decl.immediately !== undefined ? { immediately: decl.immediately } : {}),
   }
@@ -347,7 +357,7 @@ export class ClientModuleRegistry extends Service {
       pkgName,
       dsh !== null && typeof dsh === 'object' ? (dsh as Record<string, unknown>).client : undefined,
     )
-    if (decl === undefined || decl.platform !== 'web') {
+    if (decl === undefined || !(decl.platforms?.includes('web') ?? decl.platform === 'web')) {
       this.pkgMeta.set(pkgName, null)
       return null
     }

@@ -36,7 +36,7 @@ import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
-import { registerConversationNodes } from './conversation-nodes/register.ts'
+import { registerConversationChat } from '@deepseek-ai/dsh-client-runtime/client'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 
@@ -118,7 +118,7 @@ export function apply(ctx: Context): void {
   const layout = ctx.layout
   const slots = ctx.slots
 
-  registerConversationNodes(ctx)
+  registerConversationChat(ctx)
   registerChatNodeRenderers(ctx)
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-conversation: dictionaries')

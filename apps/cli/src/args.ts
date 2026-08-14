@@ -168,6 +168,21 @@ export function parseDshArgs(argv: readonly string[], version: string): DshInvoc
       resolved = resolveBoot(web, 'web', options, args)
     })
 
+  const cli = program.command('cli').description('boot the cli profile (alias of --profile cli); the terminal app\'s own flags follow')
+  cli
+    .helpOption(false)
+    .allowUnknownOption()
+    .passThroughOptions()
+    .enablePositionalOptions()
+    .argument('[args...]', 'arguments for the cli app (see: dsh cli --help)')
+    .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
+    .option('--dump-config', 'print the composed cli-profile tree (with the user layer and any --patch) and exit')
+    .option('--dump-default-config', 'print the cli profile\'s bundle layers (no user layer) and exit')
+    .action((args: string[], options: BootOptions) => {
+      rejectParentOptions('cli')
+      resolved = resolveBoot(cli, 'cli', options, args)
+    })
+
   const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
   plugin
     .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')

@@ -92,6 +92,10 @@
     { "path": "./packages/client/ui-settings-models" },
     { "path": "./packages/client/ui-settings-plugin-inventory" },
     { "path": "./packages/client/locale" },
+    { "path": "./packages/client/terminal" },
+    { "path": "./packages/client/terminal-connection" },
+    { "path": "./packages/client/terminal-conversation" },
+    { "path": "./packages/client/terminal-interaction" },
     { "path": "./packages/client/web" },
     { "path": "./apps/web" }
   ]

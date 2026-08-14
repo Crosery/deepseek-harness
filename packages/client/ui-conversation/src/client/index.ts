@@ -3,16 +3,16 @@
  * between the independently implemented skeleton and chat domains; `apply.ts`
  * owns their slot assembly.
  */
-export type {} from './conversation-nodes/assistant.ts'
-export type {} from './conversation-nodes/command.ts'
-export type {} from './conversation-nodes/compaction.ts'
-export type {} from './conversation-nodes/fallback.ts'
-export type {} from './conversation-nodes/message.ts'
-export type {} from './conversation-nodes/retry.ts'
-export type {} from './conversation-nodes/tool.ts'
-export type {} from './conversation-nodes/turn-error.ts'
-export type {} from './conversation-nodes/turn-max-tokens.ts'
-export type {} from './conversation-nodes/turn-tail.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/assistant.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/command.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/compaction.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/fallback.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/message.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/retry.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/tool.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/turn-error.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/turn-max-tokens.ts'
+export type {} from '@deepseek-ai/dsh-client-runtime/src/client/chat/turn-tail.ts'
 
 export { apply, inject } from './apply.ts'
 export { ConversationController } from './service.ts'

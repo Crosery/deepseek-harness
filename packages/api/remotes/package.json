@@ -26,6 +26,10 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./client-node": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/types/client/index.js"
+    },
     "./types": {
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
@@ -38,7 +42,7 @@
       "inject": [
         "@deepseek-ai/dsh-api-gateway"
       ],
-      "platform": "web",
+      "platforms": ["web", "terminal"],
       "immediately": true
     }
   },
