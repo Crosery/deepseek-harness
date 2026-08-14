@@ -48,6 +48,7 @@ function snapshot(overrides: Record<string, unknown> = {}): Record<string, unkno
     nodes: [],
     partial: null,
     running: false,
+    runningCalls: [],
     pending: [],
     promptError: null,
     openError: null,
@@ -194,6 +195,51 @@ describe('terminal-conversation plugin', () => {
       running: false,
     })
     expect(stub.output.join('')).toContain('· thinking now')
+  })
+
+  it('records each running call once as a dim pending row in piped runs', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    const call = {
+      callId: 'c1',
+      name: 'bash',
+      argsRaw: '{"command":"pwd"}',
+      callView: { card: 'terminal', title: 'pwd' },
+      turn: 1,
+      step: 1,
+      time: 0,
+      subCalls: [],
+    }
+    emit({ runningCalls: [call], running: true })
+    emit({ runningCalls: [call], running: true })
+    expect(stub.output.filter(line => line.includes('… bash: pwd')).length).toBe(1)
+  })
+
+  it('pulses the live activity line on a TTY through reasoning and tool runs', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined }, {}, true)
+    setCurrent('session-1')
+    emit({
+      partial: { turn: 1, step: 1, blocks: [{ kind: 'reasoning', text: 'mulling' }] },
+      running: true,
+    })
+    expect(stub.output.join('')).toContain('thinking…')
+    emit({
+      partial: null,
+      running: true,
+      runningCalls: [{
+        callId: 'c1',
+        name: 'read',
+        argsRaw: '{"file_path":"a.ts"}',
+        callView: null,
+        turn: 1,
+        step: 1,
+        time: 0,
+        subCalls: [],
+      }],
+    })
+    expect(stub.output.join('')).toContain('read: a.ts')
+    emit({ partial: null, running: false, runningCalls: [] })
+    expect(stub.output).toContain('<CLR>')
   })
 
   it('prints the welcome box for a blank interactive session with the active model', async () => {

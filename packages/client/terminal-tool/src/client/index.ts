@@ -8,9 +8,9 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client-node'
+import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, dsBlue, dsDim, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, describeToolCall, dsBlue, dsDim, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-tool'
@@ -21,11 +21,11 @@ export const inject = ['terminal']
 /** Cap for inline result preview characters (the session log keeps the full text). */
 const PREVIEW_CHARS = 2000
 
-/** Duration between paired call and result, formatted as seconds. */
+/** Duration between paired call and result, formatted as omp-style meta. */
 export function durationOf(node: ToolResultNode): string {
   if (node.callTime === null) return ''
   const seconds = (node.time - node.callTime) / 1000
-  return seconds >= 0 ? ' (' + seconds.toFixed(1) + 's)' : ''
+  return seconds >= 0 ? ' · ' + seconds.toFixed(1) + 's' : ''
 }
 
 /** Text content of a content-block list (text blocks only). */
@@ -36,12 +36,12 @@ function textOf(blocks: readonly { type?: string; text?: unknown }[]): string {
     .join('')
 }
 
-/** Preview one text body (dimmed, capped). */
-function preview(terminal: TerminalService, text: string): void {
+/** Preview one text body (dimmed, capped, indented by tree depth). */
+function preview(terminal: TerminalService, text: string, indent: string): void {
   if (text.trim() === '') return
   const capped = text.length > PREVIEW_CHARS ? text.slice(0, PREVIEW_CHARS) + ' …' : text
   for (const line of capped.split('\n')) {
-    terminal.print(ansiEnabled ? sgr(SGR.dim, '  ' + line) : '  ' + line)
+    terminal.print(ansiEnabled ? sgr(SGR.dim, indent + '  ' + line) : indent + '  ' + line)
   }
 }
 
@@ -82,16 +82,44 @@ export function viewBody(node: ToolResultNode): string {
   return textOf(node.content)
 }
 
-/** Render one settled tool-result node. */
-function renderToolResult(terminal: TerminalService, raw: unknown): void {
-  const node = raw as ToolResultNode
+/**
+ * Render one tool-call row, omp-style: a `✓ name: label · 0.5s` header
+ * with a dim preview of the render-intent content, then any nested
+ * subcalls indented below (the web renders the same recursive tree).
+ * @param terminal - the output seam.
+ * @param block - the running or settled call.
+ * @param depth - nesting depth (root is 0).
+ */
+function renderCallRow(terminal: TerminalService, block: ToolCallBlock, depth: number): void {
+  const indent = '  '.repeat(depth)
+  if (!('kind' in block)) {
+    // A running subcall inside a settled tree (interrupted run): pending marker.
+    const label = describeToolCall(block.argsRaw, block.callView)
+    const plain = indent + '… ' + block.name + (label === '' ? '' : ': ' + label)
+    terminal.print(ansiEnabled ? dsDim(plain) : plain)
+    return
+  }
+  const node = block
   const name = node.call?.name ?? 'tool'
-  const status = node.isError ? ' ✗' : ' ✓'
-  const head = '⚙ ' + name + status + durationOf(node)
+  const label = describeToolCall(node.call?.argsRaw ?? '', node.callView)
+  const head = indent + (node.isError ? '✗' : '✓') + ' ' + name + (label === '' ? '' : ': ' + label) + durationOf(node)
   terminal.print(ansiEnabled
-    ? sgr(SGR.gray, '⚙ ' + name) + (node.isError ? ' ' + sgr(SGR.brightRed, '✗') : ' ' + dsBlue('✓')) + dsDim(durationOf(node))
+    ? indent + (node.isError ? sgr(SGR.brightRed, '✗') : dsBlue('✓')) + ' ' + dsBlue(name)
+      + (label === '' ? '' : ': ' + dsDim(label)) + dsDim(durationOf(node))
     : head)
-  preview(terminal, viewBody(node))
+  const error = node.error
+  if (error !== undefined) {
+    terminal.print(ansiEnabled ? dsDim(indent + '  (' + error.code + ')') : indent + '  (' + error.code + ')')
+  }
+  preview(terminal, viewBody(node), indent)
+  for (const subCall of node.subCalls ?? []) {
+    renderCallRow(terminal, subCall, depth + 1)
+  }
+}
+
+/** Render one settled tool-result node (the root of its subcall tree). */
+function renderToolResult(terminal: TerminalService, raw: unknown): void {
+  renderCallRow(terminal, raw as ToolResultNode, 0)
 }
 
 /**

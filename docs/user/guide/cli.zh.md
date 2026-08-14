@@ -2,11 +2,7 @@
 
 [English](cli.md) | 中文
 
-`dsh cli` 在终端中运行 DeepSeek Harness 智能体。它启动与 Web 界面相同的
-主机组合（智能体核心、工具、沙箱、持久化），并在进程内传输之上挂载终端
-客户端平面：无浏览器、无 Web 监听、无 React。这里同样一切皆插件：终端
-功能包通过内核的节点渲染、命令与行预处理注册表组合进对话流，roster 与
-其他 profile 一样可被补丁修改。
+`dsh cli` 在终端中运行 DeepSeek Harness 智能体。它启动与 Web 界面相同的主机组合（智能体核心、工具、沙箱、持久化），并在进程内传输之上挂载终端客户端平面：无浏览器、无 Web 监听、无 React。这里同样一切皆插件：终端功能包通过内核的节点渲染、命令与行预处理注册表组合进对话流，roster 与其他 profile 一样可被补丁修改。
 
 ## 运行
 
@@ -19,23 +15,17 @@ dsh cli --cwd <dir> --model provider/model --permission workspace-write
 
 ## 命令
 
-`/help`、`/sessions [id前缀]`、`/new`、`/model [n]`、`/like [备注]`、
-`/dislike [备注]`、`/memory`、`/quit`，以及主机命令 `/plan`、
-`/goal`、`/compact`、`/permission <preset>`、`/feedback`、
-`/export`。
+`/help`、`/sessions [id前缀]`、`/new`、`/model [n]`、`/like [备注]`、`/dislike [备注]`、`/memory`、`/quit`，以及主机命令 `/plan`、`/goal`、`/compact`、`/permission <preset>`、`/feedback`、`/export`。
 
-审批与 ask_user_question 提示以内联形式渲染并让输入行进入应答模式。
-`@path/to/image.png` 可附加图片。
+审批与 ask_user_question 提示以内联形式渲染并让输入行进入应答模式。`@path/to/image.png` 可附加图片。
 
 ## 显示
 
-空白交互会话以欢迎框开场：像素鲸鱼、当前模型与命令提示。模型推理期间，
-输入行显示跳动的 `⠋ thinking…` 而非原始推理流；推理结束后以 `·` 前缀
-暗色打印一次，回答随后逐行原地流式输出。
+空白交互会话以欢迎框开场：像素鲸鱼、当前模型与命令提示。模型推理期间，输入行显示跳动的 `⠋ thinking…` 而非原始推理流；推理结束后以 `·` 前缀暗色打印一次，回答随后逐行原地流式输出。
 
-输入 `/` 或 `\` 会在输入行下方打开实时命令菜单：客户端命令、主机命令
-与会话技能，随输入即时过滤，光标停在首个匹配项上，各项附有说明。
-`⏎` 执行该行；两种前缀的调度行为一致。
+输入 `/` 或 `\` 会在输入行下方打开实时命令菜单：客户端命令、主机命令与会话技能，随输入即时过滤，光标停在首个匹配项上，各项附有说明。`⏎` 执行该行；两种前缀的调度行为一致。
+
+工具调用与网页端一致地呈现：运行中以跳动的盲文活动行展示（管道模式下每次调用打印一行暗色待处理行），结束后打印 omp 风格卡片——`✓ 名称: 标签 · 0.5s`，附渲染意图输出的暗色预览（终端文本、diff、搜索匹配、读取内容、网页输出），嵌套子调用缩进列出。
 
 ## 内存
 
@@ -45,6 +35,4 @@ dsh cli --cwd <dir> --model provider/model --permission workspace-write
 NODE_OPTIONS="--max-old-space-size=256 --optimize-for-size" dsh cli
 ```
 
-实测（macOS arm64，Node 24）：空闲 RSS 约 158 MB（使用上述旗标，默认
-V8 约 223 MB），运行中约 163 MB，启动到首个流式输出约 1.6 秒（含一次
-模型往返）。cli profile 禁用了 OTel 遥测行；终端界面不上传遥测。
+实测（macOS arm64，Node 24）：空闲 RSS 约 158 MB（使用上述旗标，默认 V8 约 223 MB），运行中约 163 MB，启动到首个流式输出约 1.6 秒（含一次模型往返）。cli profile 禁用了 OTel 遥测行；终端界面不上传遥测。

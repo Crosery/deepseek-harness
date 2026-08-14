@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { apply, inject, name, renderHintMenu } from '../src/client/index.ts'
+import { apply, argsPreview, describeToolCall, inject, name, renderHintMenu } from '../src/client/index.ts'
 import type { HintItem, TerminalService } from '../src/client/index.ts'
 
 function boot(): { ctx: Context; terminal: TerminalService } {
@@ -169,5 +169,25 @@ describe('terminal kernel plugin', () => {
     const { terminal } = boot()
     terminal.registerCommand('dup', () => {})
     expect(() => terminal.registerCommand('dup', () => {})).toThrow(/already registered/)
+  })
+})
+
+describe('tool call labels', () => {
+  it('prefers the call view title over raw arguments', () => {
+    expect(describeToolCall('{"command":"pwd"}', { card: 'terminal', title: 'pwd' })).toBe('pwd')
+    expect(describeToolCall('{"file_path":"a.ts"}', { card: 'generic', title: 'read a.ts' })).toBe('read a.ts')
+    expect(describeToolCall('{}', null)).toBe('')
+  })
+
+  it('previews the salient argument field', () => {
+    expect(argsPreview('{"command":"ls -la"}')).toBe('ls -la')
+    expect(argsPreview('{"file_path":"src/a.ts"}')).toBe('src/a.ts')
+    expect(argsPreview('{"pattern":"x"}')).toBe('x')
+    expect(argsPreview('{}')).toBe('')
+    expect(argsPreview('not json at all')).toBe('not json at all')
+  })
+
+  it('caps overlong previews', () => {
+    expect(argsPreview('{"input":"' + 'x'.repeat(200) + '"}').length).toBe(80)
   })
 })

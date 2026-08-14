@@ -19,6 +19,7 @@ export { ansiEnabled, sgr, SGR, dsBlue, dsDim, rgb } from './ansi.ts'
 export { AnsiMarkdown } from './markdown.ts'
 export { subscribeCurrentSession } from './session-binding.ts'
 export { renderBanner } from './welcome.ts'
+export { argsPreview, describeToolCall } from './labels.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {

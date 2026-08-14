@@ -18,7 +18,7 @@ import {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, dsBlue, dsDim, renderBanner, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, describeToolCall, dsBlue, dsDim, renderBanner, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 
 /** Stable Cordis plugin name. */
@@ -161,32 +161,61 @@ export function apply(ctx: Context): void {
   let closing = false
   let workPending = false
 
-  // omp hides the reasoning stream behind a live pulse; the settled block
-  // renders dimmed at finalize. The spinner owns one line and clears it when
-  // visible text (or the settled state) takes over. Piped runs never animate.
+  // The live activity line borrows omp's tool-activity region: a braille
+  // pulse labeled "thinking…" while the model reasons, then the running tool
+  // calls while they execute. Visible text streaming owns the line instead;
+  // piped runs print one dim pending row per call (no animation).
   const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-  let spinnerOn = false
-  let spinnerFrame = 0
-  let spinnerTimer: ReturnType<typeof setInterval> | undefined
-  const stopSpinner = (): void => {
-    if (!spinnerOn) return
-    spinnerOn = false
-    if (spinnerTimer !== undefined) {
-      clearInterval(spinnerTimer)
-      spinnerTimer = undefined
+  let liveOn = false
+  let liveLabel = ''
+  let liveFrame = 0
+  let liveTimer: ReturnType<typeof setInterval> | undefined
+  let seenRunningCalls = new Set<string>()
+  const callSuffix = (
+    call: { name: string; argsRaw: string; callView: { card: string; title?: string; description?: string } | null },
+  ): string => {
+    const label = describeToolCall(call.argsRaw, call.callView)
+    return label === '' ? '' : ': ' + label
+  }
+  const liveLabelFor = (snapshot: ConversationSnapshot): string | null => {
+    if (snapshot.partial !== null) {
+      const text = textOf(snapshot.partial.blocks)
+      const reasoning = reasoningOf(snapshot.partial.blocks)
+      if (text === '' && reasoning.trim() !== '') return 'thinking…'
+      return null
+    }
+    if (snapshot.runningCalls.length > 0) {
+      const shown = snapshot.runningCalls.slice(0, 2).map(call => call.name + callSuffix(call))
+      const more = snapshot.runningCalls.length - shown.length
+      return shown.join('  ·  ') + (more > 0 ? '  ·  +' + String(more) : '')
+    }
+    return null
+  }
+  const paintLive = (): void => {
+    const frame = SPINNER_FRAMES[liveFrame % SPINNER_FRAMES.length] ?? '⠋'
+    liveFrame += 1
+    terminal.stream(dsBlue(frame) + ' ' + dsDim(liveLabel))
+  }
+  const stopLive = (): void => {
+    if (!liveOn) return
+    liveOn = false
+    if (liveTimer !== undefined) {
+      clearInterval(liveTimer)
+      liveTimer = undefined
     }
     terminal.clearLine()
   }
-  const ensureSpinner = (): void => {
-    if (spinnerOn || !terminal.isTTY) return
-    spinnerOn = true
-    const tick = (): void => {
-      const frame = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length] ?? '⠋'
-      spinnerFrame += 1
-      terminal.stream(dsBlue(frame) + ' ' + dsDim('thinking…'))
+  const ensureLive = (label: string): void => {
+    if (!terminal.isTTY) return
+    if (!liveOn) {
+      liveOn = true
+      liveLabel = label
+      paintLive()
+      liveTimer = setInterval(paintLive, 80)
+    } else if (liveLabel !== label) {
+      liveLabel = label
+      paintLive()
     }
-    tick()
-    spinnerTimer = setInterval(tick, 80)
   }
 
   const maybeExit = (): void => {
@@ -251,6 +280,10 @@ export function apply(ctx: Context): void {
 
   const renderDelta = (face: SessionFace): void => {
     const snapshot: ConversationSnapshot = face.getSnapshot()
+    // Stop the live line before anything prints so settled cards land on the
+    // cleared line; the label restarts below afterwards when work continues.
+    const live = liveLabelFor(snapshot)
+    if (live === null) stopLive()
     const nodes = snapshot.nodes
     for (let index = printedNodes; index < nodes.length; index += 1) {
       renderNode(terminal, nodes[index] as ConversationNode, streamed)
@@ -261,9 +294,9 @@ export function apply(ctx: Context): void {
       const text = textOf(snapshot.partial.blocks)
       const reasoning = reasoningOf(snapshot.partial.blocks)
       if (text === '' && reasoning.trim() !== '') {
-        ensureSpinner()
+        // The live pulse covers the reasoning stream (label computed above);
+        // the settled block renders dimmed at finalize.
       } else {
-        stopSpinner()
         const fresh = !text.startsWith(partialText)
         if (fresh) {
           if (partialText !== '') terminal.print()
@@ -298,10 +331,18 @@ export function apply(ctx: Context): void {
         streamed = { turn: snapshot.partial.turn, step: snapshot.partial.step, text }
       }
     } else {
-      stopSpinner()
       if (partialText !== '') {
         partialText = ''
         terminal.print()
+      }
+    }
+    // Piped runs record each running call once, then the settled card prints
+    // from the node stream (the interactive live line shows the same work).
+    if (!terminal.isTTY) {
+      for (const call of snapshot.runningCalls) {
+        if (seenRunningCalls.has(call.callId)) continue
+        seenRunningCalls.add(call.callId)
+        terminal.print(ansiEnabled ? dsDim('… ' + call.name + callSuffix(call)) : '… ' + call.name + callSuffix(call))
       }
     }
     if (snapshot.running) workPending = false
@@ -314,6 +355,7 @@ export function apply(ctx: Context): void {
       maybeExit()
     }
     lastRunning = snapshot.running
+    if (live !== null) ensureLive(live)
     // The prompt redraws only at settle points: while a partial streams, the
     // input line stays hidden and the streamed run owns the line.
     if (snapshot.partial === null) terminal.refreshPrompt()
@@ -328,6 +370,7 @@ export function apply(ctx: Context): void {
     printedNodes = 0
     partialText = ''
     lastRunning = false
+    seenRunningCalls = new Set<string>()
     terminal.markdown.reset()
     if (id === undefined) return
     const binding = sessions.binding(id)
