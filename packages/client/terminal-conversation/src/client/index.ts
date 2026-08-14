@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { CliStartupValues } from '@deepseek-ai/dsh-cli-app/startup'
 import {
   registerConversationChat,
+  type AssistantMessageNode,
   type SessionFace,
   type SessionRuntime,
   type ConversationSnapshot,
@@ -60,6 +61,41 @@ interface StreamedState {
   text: string
 }
 
+/** omp-style compact count: 800 stays, 1200 → 1.2k. */
+function formatCount(value: number): string {
+  if (value < 1000) return String(value)
+  const scaled = value / 1000
+  return (scaled >= 10 ? scaled.toFixed(0) : scaled.toFixed(1).replace(/\.0$/, '')) + 'k'
+}
+
+/**
+ * Dim per-message footer: billed input ↑, output ↓, latency, and ttft —
+ * the terminal counterpart of the web's token stats and omp's footer.
+ * @param node - the finalized assistant message.
+ * @returns the footer parts joined, or null when nothing is measurable.
+ */
+function usageFooter(node: AssistantMessageNode): string | null {
+  const usage = node.usage as {
+    inputTokens?: number
+    outputTokens?: number
+    cacheReadTokens?: number
+    cacheWriteTokens?: number
+  } | undefined
+  const parts: string[] = []
+  if (usage !== undefined && typeof usage.inputTokens === 'number' && typeof usage.outputTokens === 'number') {
+    const billed = usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+    parts.push('↑ ' + formatCount(billed) + ' ↓ ' + formatCount(usage.outputTokens))
+  }
+  const timing = node.timing ?? undefined
+  if (timing !== undefined && timing.stepStartTime !== null) {
+    parts.push(((timing.completedTime - timing.stepStartTime) / 1000).toFixed(1) + 's')
+    if (timing.firstTokenTime !== null) {
+      parts.push('ttft ' + ((timing.firstTokenTime - timing.stepStartTime) / 1000).toFixed(1) + 's')
+    }
+  }
+  return parts.length === 0 ? null : parts.join(' · ')
+}
+
 /** Render one finalized conversation node. */
 function renderNode(terminal: TerminalService, node: ConversationNode, streamed?: StreamedState): void {
   // Feature plugins own their node kinds (the terminal slot mechanism)
@@ -90,12 +126,15 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
           // The settled reasoning renders dimmed, one · line per source line
           // (the live stream only ever showed the pulse, so nothing repeats).
           const reasoning = block.text.replace(/^\n+/, '').replace(/\n+$/, '')
-          if (reasoning === '') return
-          for (const line of reasoning.split('\n')) {
-            terminal.print(ansiEnabled ? dsDim('· ' + line) : '· ' + line)
+          if (reasoning !== '') {
+            for (const line of reasoning.split('\n')) {
+              terminal.print(ansiEnabled ? dsDim('· ' + line) : '· ' + line)
+            }
           }
         }
       }
+      const footer = usageFooter(node)
+      if (footer !== null) terminal.print(ansiEnabled ? dsDim(footer) : footer)
       return
     }
     case 'tool-result': {
@@ -120,9 +159,38 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
       terminal.status('⌘ /' + (node.name ?? 'command') + (node.args !== null ? ' ' + node.args : ''))
       return
     }
-    case 'context':
-    case 'steering':
-    case 'model-retry':
+    case 'steering': {
+      // A human message admitted mid-run: rendered like a user row with a
+      // dim steering marker on the first line so it reads as an interruption.
+      const text = textOf(node.content)
+      if (text.trim() === '') return
+      const marker = ansiEnabled ? dsDim('↪ ') : '↪ '
+      const lines = text.split('\n')
+      terminal.print((ansiEnabled ? dsBlue('▍ ') : '> ') + marker + (lines.shift() ?? ''))
+      for (const line of lines) {
+        terminal.print((ansiEnabled ? dsBlue('▍ ') : '> ') + line)
+      }
+      return
+    }
+    case 'context': {
+      // Producer-supplied context or recalled memory: dim rows with the
+      // source marker (↩ recall, ▸ inject) and producer label.
+      const text = textOf(node.content)
+      if (text.trim() === '') return
+      const provenance = node.provenance as { role?: string; label?: string | null } | undefined
+      const marker = provenance?.role === 'recall' ? '↩ ' : '▸ '
+      const label = provenance?.label == null || provenance.label === '' ? '' : provenance.label + ': '
+      for (const line of text.split('\n')) {
+        terminal.print(ansiEnabled ? dsDim(marker + label + line) : marker + label + line)
+      }
+      return
+    }
+    case 'model-retry': {
+      if (node.retryState === 'cancelled') return
+      const state = node.retryState === 'started' ? 'retrying…' : 'retry scheduled'
+      terminal.print(ansiEnabled ? dsDim('↻ ' + state) : '↻ ' + state)
+      return
+    }
     case 'unknown': {
       return
     }

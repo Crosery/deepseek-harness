@@ -134,8 +134,20 @@ export function apply(ctx: Context): void {
   )
   ctx.effect(
     () => terminal.registerNodeRenderer('command', (node) => {
-      const command = node as { name?: string | null; args?: string | null }
+      const command = node as {
+        name?: string | null
+        args?: string | null
+        outcome?: { kind: 'success' | 'error'; text?: string } | null
+      }
       terminal.status('⌘ /' + (command.name ?? 'command') + (command.args !== null && command.args !== undefined ? ' ' + command.args : ''))
+      // The settled outcome renders like a tool row: the command's visible
+      // result text (the web shows the same on its command card).
+      const outcome = command.outcome
+      if (outcome === null || outcome === undefined || outcome.text === undefined || outcome.text === '') return
+      const line = (outcome.kind === 'error' ? '✗ ' : '✓ ') + outcome.text
+      terminal.print(ansiEnabled
+        ? (outcome.kind === 'error' ? sgr(SGR.brightRed, line) : dsDim(line))
+        : line)
     }),
     'terminal-tool: command renderer',
   )

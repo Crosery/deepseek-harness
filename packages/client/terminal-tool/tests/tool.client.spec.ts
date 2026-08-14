@@ -30,6 +30,7 @@ describe('tool result rendering', () => {
     const renderers = new Map<string, (raw: unknown) => void>()
     ctx.provide('terminal', {
       print: (text = '') => { prints.push(text) },
+      status: (text: string) => { prints.push(text) },
       registerNodeRenderer: (kind: string, renderer: (raw: unknown) => void) => {
         renderers.set(kind, renderer)
         return () => { renderers.delete(kind) }
@@ -64,6 +65,25 @@ describe('tool result rendering', () => {
     expect(prints[0]).toContain('✓ read: read src · 1.0s')
     expect(prints).toContain('  file body')
     expect(prints.join('\n')).toContain('  ✗ grep: x · 0.2s')
+  })
+
+  it('renders a command outcome like a tool row', () => {
+    const ctx = new Context()
+    const prints: string[] = []
+    const renderers = new Map<string, (raw: unknown) => void>()
+    ctx.provide('terminal', {
+      print: (text = '') => { prints.push(text) },
+      status: () => {},
+      registerNodeRenderer: (kind: string, renderer: (raw: unknown) => void) => {
+        renderers.set(kind, renderer)
+        return () => { renderers.delete(kind) }
+      },
+    })
+    apply(ctx)
+    renderers.get('command')?.({ name: 'feedback', args: 'good', outcome: { kind: 'success', text: 'feedback recorded' } })
+    expect(prints).toContain('✓ feedback recorded')
+    renderers.get('command')?.({ name: 'compact', args: null, outcome: { kind: 'error', text: 'compaction failed' } })
+    expect(prints).toContain('✗ compaction failed')
   })
 
   it('falls back to raw content without a result view', () => {

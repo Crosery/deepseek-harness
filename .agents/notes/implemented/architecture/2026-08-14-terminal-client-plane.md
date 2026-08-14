@@ -31,6 +31,7 @@ The conversation-node definitions and chat snapshot builder moved from `packages
 - live command hints: typing / or \ opens a filtered menu under the input (client commands, host commands, session skills), cursor on the first match, descriptions beside each row; both prefixes dispatch identically
 - tool cards: a live braille activity line while calls run (one dim pending row per call in piped runs), then an omp-style `✓ name: label · 0.5s` card with the render-intent preview (terminal/diff/search/read/web/generic) and nested subcalls indented below
 - approvals + ask_user_question inline prompts (answer-mode input)
+- steered messages (`↪` user rows), injected/recalled context (`▸`/`↩` dim rows with producer label), model retries (`↻` dim notices), and a dim per-message usage footer (`↑ billed ↓ output · latency · ttft`)
 - slash commands: client /help /sessions /new /model /like /dislike /memory /quit; host /plan /goal /compact /permission /feedback /export pass through
 - goal bar, plan chip, jobs and subagent status line (host projections)
 - image attachments via `@path/to/image.png` expansion

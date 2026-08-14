@@ -159,6 +159,45 @@ describe('terminal-conversation plugin', () => {
     expect(stub.faceCommands).toEqual(['/plan on'])
   })
 
+  it('renders steering and context rows and retry notices', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({
+      nodes: [
+        { kind: 'steering', messageId: 'm1', seq: 1, time: 0, content: [{ type: 'text', text: 'steer here' }], source: {} },
+        { kind: 'context', seq: 2, time: 1, content: [{ type: 'text', text: 'recalled note' }], source: {}, provenance: { role: 'recall', label: 'session-b' }, form: null },
+        { kind: 'model-retry', seq: 3, time: 2, retryState: 'started', attempt: 1 },
+        { kind: 'model-retry', seq: 4, time: 3, retryState: 'cancelled', attempt: 2 },
+      ],
+    })
+    const transcript = stub.output.join('\n')
+    expect(transcript).toContain('> ↪ steer here')
+    expect(transcript).toContain('↩ session-b: recalled note')
+    expect(transcript).toContain('↻ retrying…')
+    expect(transcript).not.toContain('retry scheduled')
+    expect(transcript).not.toContain('cancelled')
+  })
+
+  it('prints the dim usage and timing footer after an assistant message', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({
+      nodes: [{
+        kind: 'assistant',
+        seq: 1,
+        messageId: 'm1',
+        time: 4000,
+        turn: 1,
+        step: 1,
+        blocks: [{ kind: 'text', text: 'done' }],
+        usage: { inputTokens: 1000, outputTokens: 800, cacheReadTokens: 200 },
+        timing: { stepStartTime: 1000, firstTokenTime: 1500, completedTime: 4000 },
+      }],
+    })
+    const transcript = stub.output.join('\n')
+    expect(transcript).toContain('↑ 1.2k ↓ 800 · 3.0s · ttft 0.5s')
+  })
+
   it('advances on empty delta lines without printing blank rows', async () => {
     const { stub, setCurrent, emit } = await boot({ task: undefined })
     setCurrent('session-1')
