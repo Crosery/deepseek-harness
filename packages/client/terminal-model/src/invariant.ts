@@ -1,23 +1,23 @@
 /**
- * Package-owned invariant companion for `@deepseek-ai/dsh-cli-app`.
- * @module @deepseek-ai/dsh-cli-app/invariant
+ * Package-owned invariant companion for `@deepseek-ai/dsh-client-terminal-model`.
+ * @module @deepseek-ai/dsh-client-terminal-model/invariant
  */
 
 /* jscpd:ignore-start */
 import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-cli-app'
+const PACKAGE_NAME = '@deepseek-ai/dsh-client-terminal-model'
 
 /** Cordis companion plugin name. */
-export const name = 'cli-app-invariant'
+export const name = 'client-terminal-model-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
 /**
- * No runtime invariant: the runner owns a private client root context whose
- * lifecycle is already fail-loud (roster activation sweep, teardown effect)
- * it emits no host events and holds no cross-plugin mutable state.
+ * No runtime invariant: this package is a pure presentation projection. It
+ * emits no cordis events and owns no cross-plugin mutable state; its kernel
+ * registrations unwind with the plugin fiber.
  */
 const install: InvariantInstaller = () => {}
 

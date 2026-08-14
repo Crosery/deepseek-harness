@@ -64,6 +64,27 @@ the `chat` view builder. The web registers it in ui-conversation's apply;
 the terminal registers it in terminal-conversation's apply. One fold, two
 renderers.
 
+## Feature parity (all web agent features, terminal-rendered)
+
+- conversation (streaming markdown, reasoning rows, queue replay, resume)
+- tool cards (render-intent views: terminal/diff/search/read/web/generic)
+- approvals + ask_user_question inline prompts (answer-mode input)
+- slash commands: client /help /sessions /new /model /like /dislike /memory
+  /quit; host /plan /goal /compact /permission /feedback /export pass through
+- goal bar, plan chip, jobs and subagent status line (host projections)
+- image attachments via `@path/to/image.png` expansion
+- session resume (`--session`), model selection, permission presets
+
+## Memory and startup (measured, macOS arm64, Node 24)
+
+- `dsh cli` idle (session open, no turn): RSS ~158 MB with
+  `NODE_OPTIONS=--max-old-space-size=256 --optimize-for-size`, ~223 MB with
+  default V8 settings; heap capped ~70 MB.
+- During a live turn with tool output: RSS ~163 MB (nearly flat).
+- Startup to first streamed output incl. a full model round-trip: ~1.6 s.
+- The cli profile disables the session-telemetry-otel row (the terminal
+  surface uploads no telemetry); the web keeps its default-disabled exporter.
+
 ## Key mechanics learned (do not relearn)
 
 - `Context.extend` prototype-chains, so `reflect`/service stores are

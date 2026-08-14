@@ -96,6 +96,11 @@
     { "path": "./packages/client/terminal-connection" },
     { "path": "./packages/client/terminal-conversation" },
     { "path": "./packages/client/terminal-interaction" },
+    { "path": "./packages/client/terminal-tool" },
+    { "path": "./packages/client/terminal-commands" },
+    { "path": "./packages/client/terminal-model" },
+    { "path": "./packages/client/terminal-status" },
+    { "path": "./packages/client/terminal-attachment" },
     { "path": "./packages/client/web" },
     { "path": "./apps/web" }
   ]

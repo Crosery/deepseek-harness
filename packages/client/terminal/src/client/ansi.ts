@@ -32,8 +32,8 @@ export const SGR = {
  * @returns the wrapped text.
  */
 export function sgr(code: number, text: string): string {
-  return '\u001b[' + code + 'm' + text + '\u001b[0m'
+  return `\u001b[${code}m${text}\u001b[0m`
 }
 
 /** Whether ANSI output is enabled for this process. */
-export const ansiEnabled = process.stdout.isTTY === true && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'
+export const ansiEnabled =  process.stdout.isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'

@@ -1236,6 +1236,12 @@ importers:
       '@deepseek-ai/dsh-client-terminal':
         specifier: workspace:^
         version: link:../../client/terminal
+      '@deepseek-ai/dsh-client-terminal-attachment':
+        specifier: workspace:^
+        version: link:../../client/terminal-attachment
+      '@deepseek-ai/dsh-client-terminal-commands':
+        specifier: workspace:^
+        version: link:../../client/terminal-commands
       '@deepseek-ai/dsh-client-terminal-connection':
         specifier: workspace:^
         version: link:../../client/terminal-connection
@@ -1245,6 +1251,15 @@ importers:
       '@deepseek-ai/dsh-client-terminal-interaction':
         specifier: workspace:^
         version: link:../../client/terminal-interaction
+      '@deepseek-ai/dsh-client-terminal-model':
+        specifier: workspace:^
+        version: link:../../client/terminal-model
+      '@deepseek-ai/dsh-client-terminal-status':
+        specifier: workspace:^
+        version: link:../../client/terminal-status
+      '@deepseek-ai/dsh-client-terminal-tool':
+        specifier: workspace:^
+        version: link:../../client/terminal-tool
       '@deepseek-ai/dsh-cmdline':
         specifier: workspace:^
         version: link:../../boot/cmdline
@@ -1765,6 +1780,42 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
 
+  packages/client/terminal-attachment:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-terminal':
+        specifier: workspace:^
+        version: link:../terminal
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+
+  packages/client/terminal-commands:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-terminal':
+        specifier: workspace:^
+        version: link:../terminal
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
   packages/client/terminal-connection:
     dependencies:
       '@deepseek-ai/dsh-client-connection':
@@ -1819,6 +1870,57 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/client/terminal-model:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-terminal':
+        specifier: workspace:^
+        version: link:../terminal
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/client/terminal-status:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-terminal':
+        specifier: workspace:^
+        version: link:../terminal
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/client/terminal-tool:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@deepseek-ai/dsh-client-terminal':
+        specifier: workspace:^
+        version: link:../terminal
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/client/ui-agent-preset:
     devDependencies:

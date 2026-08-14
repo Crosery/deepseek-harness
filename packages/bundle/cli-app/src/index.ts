@@ -104,7 +104,7 @@ async function bootTerminalPlane(ctx: Context, transport: { fetch: typeof fetch 
   root.provide('cliTransport', transport)
   root.provide('cliStartup', ctx.cliStartup)
   const loader = root.loader
-  // Node resolves each package MAIN (the empty host half) on a bare import;
+  // Node resolves each package MAIN (the empty host half) on a bare import
   // the browser's module system maps package names to client bundles. Mount
   // the client-node subpath so the terminal halves apply instead.
   await Promise.all(roster.map(async (name) => {

@@ -1,7 +1,7 @@
 /**
  * Terminal client plane wire: provides `ctx.connection` over the in-process
  * gateway. The cli runner composes the host `apiProxy` into a pure fetch
- * handler and provides it as `ctx.cliTransport` before this plugin mounts;
+ * handler and provides it as `ctx.cliTransport` before this plugin mounts
  * unary calls, both SSE event streams, and the respond channel all travel
  * through that one handler — no socket, no listener, no network.
  * @module @deepseek-ai/dsh-client-terminal-connection/client

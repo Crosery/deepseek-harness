@@ -17,7 +17,7 @@ export class TerminalWriter {
 
   /** Whether the stream is an interactive terminal. */
   get isTTY(): boolean {
-    return this.stream.isTTY === true
+    return  this.stream.isTTY
   }
 
   /**

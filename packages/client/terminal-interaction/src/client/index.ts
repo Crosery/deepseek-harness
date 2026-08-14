@@ -129,7 +129,7 @@ export function apply(ctx: Context): void {
     }
     pending = []
     if (face === undefined) return
-    unsubscribe = face.subscribe(() => refresh(face))
+    unsubscribe = face.subscribe(() => { refresh(face) })
     refresh(face)
   })
 

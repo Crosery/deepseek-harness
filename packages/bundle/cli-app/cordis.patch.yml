@@ -19,6 +19,13 @@
 - id: hmr
   disabled: true
 
+# The terminal surface uploads no telemetry, so the OTel exporter SDK stays
+# out of the process entirely (a measurable RSS win on the CLI; the web
+# surface keeps its default-disabled-but-loaded exporter). A deployment that
+# opts into telemetry re-enables this row in a later patch layer.
+- id: session-telemetry-otel
+  disabled: true
+
 - id: tools
   config:
     # Keep the same temporary process-wide Code Mode opt-in as the Web surface.
@@ -122,3 +129,18 @@
 
     - id: terminal-interaction
       name: '@deepseek-ai/dsh-client-terminal-interaction'
+
+    - id: terminal-tool
+      name: '@deepseek-ai/dsh-client-terminal-tool'
+
+    - id: terminal-commands
+      name: '@deepseek-ai/dsh-client-terminal-commands'
+
+    - id: terminal-model
+      name: '@deepseek-ai/dsh-client-terminal-model'
+
+    - id: terminal-status
+      name: '@deepseek-ai/dsh-client-terminal-status'
+
+    - id: terminal-attachment
+      name: '@deepseek-ai/dsh-client-terminal-attachment'

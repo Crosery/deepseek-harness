@@ -27,9 +27,6 @@ export const name = 'terminal-conversation'
 /** Required services. */
 export const inject = ['terminal', 'sessions', 'connection', 'cliStartup', 'conversationEvents', 'conversationViews']
 
-/** Cap for tool-result preview lines (full output is one keystroke away in a later milestone). */
-const RESULT_PREVIEW_CHARS = 2000
-
 /** A block-shaped value that may carry text (ContentBlock or AssistantBlock). */
 type TextCarrying = { type?: string; kind?: string; text?: unknown }
 
@@ -37,7 +34,7 @@ type TextCarrying = { type?: string; kind?: string; text?: unknown }
 function textOf(blocks: readonly TextCarrying[]): string {
   return blocks
     .filter(block => (block.type ?? block.kind) === 'text')
-    .map(block => String(block.text ?? ''))
+    .map(block => typeof block.text === 'string' ? block.text : '')
     .join('')
 }
 
@@ -50,6 +47,9 @@ function renderBlock(terminal: TerminalService, text: string): void {
 
 /** Render one finalized conversation node. */
 function renderNode(terminal: TerminalService, node: ConversationNode): void {
+  // Feature plugins own their node kinds (the terminal slot mechanism)
+  // the built-ins below render whatever remains.
+  if (terminal.renderNode(node.kind, node)) return
   switch (node.kind) {
     case 'user': {
       const text = textOf(node.content)
@@ -67,15 +67,9 @@ function renderNode(terminal: TerminalService, node: ConversationNode): void {
       return
     }
     case 'tool-result': {
+      // Fallback when no tool plugin registered a renderer.
       const name = node.call?.name ?? 'tool'
-      terminal.print(ansiEnabled ? sgr(SGR.gray, '⚙ ' + name) + (node.isError ? ' ' + sgr(SGR.brightRed, '✗') : ' ✓') : '⚙ ' + name + (node.isError ? ' ✗' : ' ✓'))
-      const result = textOf(node.content)
-      if (result !== '') {
-        const preview = result.length > RESULT_PREVIEW_CHARS ? result.slice(0, RESULT_PREVIEW_CHARS) + ' …' : result
-        for (const line of preview.split('\n')) {
-          terminal.print(ansiEnabled ? sgr(SGR.dim, '  ' + line) : '  ' + line)
-        }
-      }
+      terminal.print('⚙ ' + name + (node.isError ? ' ✗' : ' ✓'))
       return
     }
     case 'turn-error': {
@@ -135,11 +129,46 @@ export function apply(ctx: Context): void {
   let workPending = false
 
   const maybeExit = (): void => {
-    if (!closing || currentId === undefined || workPending) return
+    if (!closing) return
+    if (terminal.busy()) {
+      // A client command (e.g. the model picker) is still running; re-check
+      // once it settles.
+      setTimeout(maybeExit, 50)
+      return
+    }
+    if (currentId === undefined || workPending) return
     const binding = sessions.binding(currentId)
     if (binding === undefined) return
     if (binding.session.getSnapshot().running) return
     process.exit(0)
+  }
+
+  const handleLine = async (line: string): Promise<void> => {
+    if (currentId === undefined) {
+      earlyLines.push(line)
+      return
+    }
+    const binding = sessions.binding(currentId)
+    if (binding === undefined) {
+      earlyLines.push(line)
+      return
+    }
+    const face = binding.session
+    // Answer mode: the interaction plugin owns the line while a host wait
+    // (approval or question) is pending.
+    if (face.getSnapshot().pending.length > 0) return
+    const trimmed = line.trim()
+    if (trimmed === '') return
+    if (trimmed.startsWith('/')) {
+      // Client-side commands win; unknown ones fall through to the host
+      // command registry (plan/goal/compact/permission/feedback/export).
+      if (!terminal.dispatchCommand(line)) {
+        await face.command(line)
+      }
+    } else {
+      workPending = true
+      await face.prompt([{ type: 'text', text: line }], 'queue')
+    }
   }
 
   const applyStartupOverrides = (id: SessionId, face: SessionFace): void => {
@@ -213,7 +242,7 @@ export function apply(ctx: Context): void {
     const binding = sessions.binding(id)
     if (binding === undefined) return
     const face: SessionFace = binding.session
-    unsubscribe = face.subscribe(() => renderDelta(face))
+    unsubscribe = face.subscribe(() => { renderDelta(face) })
     renderDelta(face)
     applyStartupOverrides(id, face)
     if (startup.task !== undefined && !taskSent) {
@@ -223,8 +252,7 @@ export function apply(ctx: Context): void {
     // Lines that arrived before the session bound (piped input, fast typing)
     // replay once a face exists.
     while (earlyLines.length > 0) {
-      workPending = true
-      void face.prompt([{ type: 'text', text: earlyLines.shift() as string }], 'queue')
+      void handleLine(earlyLines.shift() as string)
     }
     maybeExit()
   }
@@ -238,29 +266,7 @@ export function apply(ctx: Context): void {
   bindSession(sessions.list.getSnapshot().current)
 
   if (startup.task === undefined) {
-    terminal.onLine(async (line) => {
-      if (currentId === undefined) {
-        earlyLines.push(line)
-        return
-      }
-      const binding = sessions.binding(currentId)
-      if (binding === undefined) {
-        earlyLines.push(line)
-        return
-      }
-      const face = binding.session
-      // Answer mode: the interaction plugin owns the line while a host wait
-      // (approval or question) is pending.
-      if (face.getSnapshot().pending.length > 0) return
-      const trimmed = line.trim()
-      if (trimmed === '') return
-      if (trimmed.startsWith('/')) {
-        await face.command(line)
-      } else {
-        workPending = true
-        await face.prompt([{ type: 'text', text: line }], 'queue')
-      }
-    })
+    terminal.onLine(line => handleLine(line))
     terminal.onSigint(() => {
       if (currentId === undefined) return
       const binding = sessions.binding(currentId)
