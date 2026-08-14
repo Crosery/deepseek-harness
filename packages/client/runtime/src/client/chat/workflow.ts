@@ -1,7 +1,7 @@
 import type {
   ChatConversationViewNode, ConversationLocation, ConversationNodeContext,
   ConversationNodeDefinition,
-} from '@deepseek-ai/dsh-client-runtime/client'
+} from '../contract/conversation.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   ToolWorkflowAgentEndData, ToolWorkflowAgentStartData,
@@ -34,7 +34,7 @@ export interface WorkflowRunChatData {
   readonly phases: readonly WorkflowRunPhaseData[]
 }
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module './chat-nodes.ts' {
   interface ChatNodeDataMap {
     /** Durable top-level workflow run and all members that actually started. */
     'workflow-run': WorkflowRunChatData

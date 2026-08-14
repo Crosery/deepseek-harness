@@ -4,6 +4,7 @@
   "include": ["src"],
   "references": [
     { "path": "../../../vendor/cordis" },
+    { "path": "../connection/tsconfig.client.json" },
     { "path": "../runtime" },
     { "path": "../terminal" },
     { "path": "../../runtime-diagnostics/invariants" }

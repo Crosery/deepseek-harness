@@ -45,8 +45,15 @@ function renderBlock(terminal: TerminalService, text: string): void {
   }
 }
 
+/** Streamed-partial bookkeeping for duplicate suppression. */
+interface StreamedState {
+  turn: number
+  step: number
+  text: string
+}
+
 /** Render one finalized conversation node. */
-function renderNode(terminal: TerminalService, node: ConversationNode): void {
+function renderNode(terminal: TerminalService, node: ConversationNode, streamed?: StreamedState): void {
   // Feature plugins own their node kinds (the terminal slot mechanism)
   // the built-ins below render whatever remains.
   if (terminal.renderNode(node.kind, node)) return
@@ -61,8 +68,15 @@ function renderNode(terminal: TerminalService, node: ConversationNode): void {
     }
     case 'assistant': {
       for (const block of node.blocks) {
-        if (block.kind === 'text') renderBlock(terminal, block.text)
-        else if (block.kind === 'reasoning') renderBlock(terminal, (ansiEnabled ? sgr(SGR.dim, '· ') : '· ') + block.text)
+        if (block.kind === 'text') {
+          // Skip the prefix already streamed as a partial (the model text
+          // prints once, not twice).
+          let text = block.text
+          if (streamed !== undefined && node.turn === streamed.turn && node.step === streamed.step && text.startsWith(streamed.text)) {
+            text = text.slice(streamed.text.length)
+          }
+          if (text !== '') renderBlock(terminal, text)
+        } else if (block.kind === 'reasoning') renderBlock(terminal, (ansiEnabled ? sgr(SGR.dim, '· ') : '· ') + block.text)
       }
       return
     }
@@ -121,6 +135,7 @@ export function apply(ctx: Context): void {
   let unsubscribe: (() => void) | undefined
   let printedNodes = 0
   let partialText = ''
+  let streamed: StreamedState | undefined
   let lastRunning = false
   let taskSent = false
   let overridesApplied = false
@@ -189,9 +204,10 @@ export function apply(ctx: Context): void {
     const snapshot: ConversationSnapshot = face.getSnapshot()
     const nodes = snapshot.nodes
     for (let index = printedNodes; index < nodes.length; index += 1) {
-      renderNode(terminal, nodes[index] as ConversationNode)
+      renderNode(terminal, nodes[index] as ConversationNode, streamed)
     }
     printedNodes = nodes.length
+    if (snapshot.partial === null && partialText === '' && streamed !== undefined) streamed = undefined
     if (snapshot.partial !== null) {
       const text = textOf(snapshot.partial.blocks)
       if (text.startsWith(partialText)) {
@@ -212,6 +228,7 @@ export function apply(ctx: Context): void {
         if (tail !== '') terminal.write(tail)
       }
       partialText = text
+      streamed = { turn: snapshot.partial.turn, step: snapshot.partial.step, text }
     } else if (partialText !== '') {
       partialText = ''
       terminal.print()

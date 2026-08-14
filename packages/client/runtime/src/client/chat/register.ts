@@ -19,6 +19,8 @@ import { registerToolConversationNode } from './tool.ts'
 import { registerTurnErrorConversationNode } from './turn-error.ts'
 import { registerTurnMaxTokensConversationNode } from './turn-max-tokens.ts'
 import { registerTurnTailConversationNode } from './turn-tail.ts'
+import { deliverablesDefinition } from './turn-deliverables.ts'
+import { workflowRunDefinition } from './workflow.ts'
 
 /**
  * Register the Chat business definitions and target builder.
@@ -36,5 +38,9 @@ export function registerConversationChat(ctx: Context): void {
   registerTurnMaxTokensConversationNode(ctx)
   registerTurnTailConversationNode(ctx)
   registerUnknownConversationFallback(ctx)
+  // State-only contributors: durable workflow-run and produced-file facts
+  // fold into turn data and chat nodes for every platform.
+  ctx.conversationEvents.register(workflowRunDefinition)
+  ctx.conversationEvents.register(deliverablesDefinition)
   registerChatConversationView(ctx)
 }

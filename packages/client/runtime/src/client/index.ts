@@ -52,6 +52,18 @@ export type {} from './chat/tool.ts'
 export type {} from './chat/turn-error.ts'
 export type {} from './chat/turn-max-tokens.ts'
 export type {} from './chat/turn-tail.ts'
+export type {} from './chat/workflow.ts'
+export type {} from './chat/turn-deliverables.ts'
+export type {
+  WorkflowRunChatData, WorkflowRunMemberData, WorkflowRunPhaseData, WorkflowRunStatus,
+} from './chat/workflow.ts'
+export { workflowPhaseKey, workflowRunDefinition } from './chat/workflow.ts'
+export type { DeliverablesTurnData } from './chat/turn-deliverables.ts'
+export {
+  basename as deliverablesBasename, deliverablesDefinition, producedFileMentions, producedForClosing,
+  selectProducedFiles,
+} from './chat/turn-deliverables.ts'
+export type { DeliverablesOwner, FileMentionsFace } from './chat/turn-deliverables.ts'
 export type { RootOwnerProps } from './slots.ts'
 export { SessionCreateError, SessionRuntime, scopeOf, workspaceTitleOf } from './sessions/service.ts'
 export { indexSubagentDescendants } from './sessions/subagent-lineage.ts'

@@ -58,6 +58,12 @@
     },
     {
       "path": "../../api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../../workflow/workflow"
+    },
+    {
+      "path": "../../workflow/tool-workflow"
     }
   ],
   "exclude": [

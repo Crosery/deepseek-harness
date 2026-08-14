@@ -3,12 +3,9 @@
  * model-free: the vocabulary is the mutation tools' own follow-along
  * `locations`, never the closing prose.
  */
-import type {
-  ConversationNodeDefinition, ToolResultNode,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-client-runtime/client'
-import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ConversationNodeDefinition, TurnLocation } from '../contract/conversation.ts'
+import type { ToolResultNode } from '../sessions/conversation.ts'
+import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 
 interface ProducedPath {
   readonly seq: number
@@ -20,7 +17,7 @@ export interface DeliverablesTurnData {
   readonly produced: readonly ProducedPath[]
 }
 
-declare module '@deepseek-ai/dsh-client-runtime/client' {
+declare module '../contract/conversation.ts' {
   interface ConversationTurnDataMap {
     /** Successful mutation paths accumulated in this Turn. */
     deliverables: DeliverablesTurnData
@@ -85,11 +82,33 @@ export function producedForClosing(
 }
 
 /**
+ * Local owner slice the data layer reads (the UI slot type lives in
+ * ui-conversation; a structural slice keeps the data layer free of UI types).
+ */
+export interface DeliverablesOwner {
+  /** Engine-owned closing Turn boundary. */
+  readonly turn: TurnLocation
+  /** The closing assistant's seq — the anchor the tail renders under. */
+  readonly seq: number
+}
+
+/** Local mention-resolver face (the UI type lives in ui-primitives). */
+export interface FileMentionsFace {
+  /**
+   * Resolve one inline-code token.
+   * @param value - The authored token, exactly as written.
+   * @returns The opener with its accessible label and full-path title, or
+   * undefined when the token names no known file.
+   */
+  resolve(value: string): { open: () => void; label: string; title: string } | undefined
+}
+
+/**
  * Claim the turn-tail chain only when its closing turn produced files.
  * @param owner - Turn-tail owner currency for the closing assistant.
  * @returns Produced paths as the component's match, or null to decline before mount.
  */
-export function selectProducedFiles(owner: TurnTailOwnerProps): readonly string[] | null {
+export function selectProducedFiles(owner: DeliverablesOwner): readonly string[] | null {
   const paths = producedForClosing(owner.turn.data.get('deliverables'), owner.seq)
   return paths.length === 0 ? null : paths
 }
@@ -164,7 +183,7 @@ export function producedFileMentions(
   paths: readonly string[],
   openFile: (path: string) => void,
   label: (path: string) => string,
-): MarkdownFileMentions {
+): FileMentionsFace {
   return {
     resolve(value) {
       const path = paths.includes(value) ? value : onlyPathWithBasename(paths, value)

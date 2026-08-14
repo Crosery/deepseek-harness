@@ -7,6 +7,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client-node'
 import type { SessionRuntime } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { ansiEnabled, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
@@ -15,7 +16,7 @@ import { ansiEnabled, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-n
 export const name = 'terminal-commands'
 
 /** Required services. */
-export const inject = ['terminal', 'sessions', 'remote']
+export const inject = ['terminal', 'sessions', 'connection', 'remote']
 
 /** The messageFeedback remote namespace slice the rating commands use. */
 interface MessageFeedbackRemote {
@@ -37,12 +38,15 @@ interface CommandHelp {
 export function apply(ctx: Context): void {
   const terminal = ctx.terminal
   const sessions = ctx.get('sessions') as SessionRuntime
+  const connection = ctx.get('connection') as ConnectionHandle
 
   const help: Record<string, CommandHelp> = {
     help: { summary: 'list commands' },
     sessions: { summary: 'list sessions and switch to one (/sessions <id>)' },
     new: { summary: 'start a new session' },
     model: { summary: 'pick provider/model (/model, or /model <n> to apply the nth choice)' },
+    skills: { summary: 'list the session skill catalog' },
+    settings: { summary: 'list settings namespaces' },
     memory: { summary: 'report process memory (RSS, heap, external)' },
     quit: { summary: 'exit the terminal session' },
   }
@@ -115,6 +119,42 @@ export function apply(ctx: Context): void {
 
   ctx.effect(() => terminal.registerCommand('like', feedback('good')), 'terminal-commands: /like')
   ctx.effect(() => terminal.registerCommand('dislike', feedback('bad')), 'terminal-commands: /dislike')
+
+  ctx.effect(() => terminal.registerCommand('skills', async () => {
+    const current = sessions.list.getSnapshot().current
+    if (current === undefined) {
+      terminal.print('no session open yet')
+      return
+    }
+    const response = await connection.api.skills.list({ sessionId: current })
+    if (!response.result.ok) {
+      terminal.print('skill catalog failed: ' + response.result.error.message)
+      return
+    }
+    const skills = response.result.value.skills
+    if (skills.length === 0) {
+      terminal.print('no skills in the catalog')
+      return
+    }
+    for (const skill of skills) {
+      const marker = skill.modelInvocable ? ' ' : '*'
+      terminal.print(marker + ' /' + skill.name + '  ' + skill.description)
+    }
+    terminal.print(ansiEnabled ? sgr(SGR.dim, '* user-invoked only; reference a skill with /name in a prompt') : '* user-invoked only')
+  }), 'terminal-commands: /skills')
+
+  ctx.effect(() => terminal.registerCommand('settings', async () => {
+    const response = await connection.api.settings.describe({})
+    if (!response.result.ok) {
+      terminal.print('settings failed: ' + response.result.error.message)
+      return
+    }
+    const described = response.result.value
+    for (const namespace of described.namespaces) {
+      terminal.print(namespace.ns + (described.writable ? '' : ' (read-only)'))
+    }
+    terminal.print(ansiEnabled ? sgr(SGR.dim, 'edit the document with /feedback-free host tooling or $DSH_HOME/settings.yaml') : 'edit $DSH_HOME/settings.yaml')
+  }), 'terminal-commands: /settings')
 
   ctx.effect(() => terminal.registerCommand('memory', () => {
     const usage = process.memoryUsage()

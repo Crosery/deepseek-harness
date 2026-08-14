@@ -25,7 +25,7 @@ import {
 import {
   basename, deliverablesDefinition, producedFileMentions, producedForClosing, selectProducedFiles,
   type DeliverablesTurnData,
-} from '../src/client/turn-deliverables.ts'
+} from '@deepseek-ai/dsh-client-runtime/src/client/chat/turn-deliverables.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as applyInvariant } from '../src/invariant.ts'
 import { en, zh } from '../src/client/locales.ts'

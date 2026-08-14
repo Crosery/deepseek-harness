@@ -3,7 +3,8 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  ConversationEventRegistry, ConversationNodeAssembler, SlotRegistry,
+  ConversationEventRegistry, ConversationNodeAssembler, ConversationViewRegistry,
+  SlotRegistry, registerConversationChat,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   ChatConversationViewNode, ConversationEventInput, ConversationMatch, ConversationNodeDefinition,
@@ -18,7 +19,7 @@ import { apply, inject } from '../src/client/index.ts'
 import { zh } from '../src/client/locales.ts'
 import {
   workflowRunDefinition, type WorkflowRunChatData,
-} from '../src/client/workflow-definition.ts'
+} from '@deepseek-ai/dsh-client-runtime/src/client/chat/workflow.ts'
 import { apply as applyNode } from '../src/index.ts'
 import { apply as applyInvariant } from '../src/invariant.ts'
 import type {} from '../src/client/index.ts'
@@ -550,29 +551,39 @@ describe('plugin lifecycle', () => {
     ctx.provide('remote', { $on: () => () => {} } as never)
     ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
     await ctx.plugin(ConversationEventRegistry).await()
+    await ctx.plugin(ConversationViewRegistry).await()
     await ctx.plugin(TestSessions).await()
     ctx.slots.register({
       name: 'root',
       children: { 'conversation.chat.node': { kind: 'keyed', scope: 'session' } },
     } as never, () => null)
     await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
+    // The production composition registers the shared chat fold (which owns
+    // the workflow-run definition) beside this panel plugin.
+    const foldFiber = ctx.plugin({
+      inject: ['conversationEvents', 'conversationViews'],
+      apply: (foldCtx) => { registerConversationChat(foldCtx) },
+    })
+    await foldFiber.await()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
+    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toContain('workflow-run')
     expect(ctx.slots.entries('conversation.chat.node')).toHaveLength(1)
     const entry = ctx.slots.entries('conversation.chat.node')[0]!
     const face = entry.inject?.() as unknown as WorkflowRunInjected
     face.openSession(CHILD_ID)
     expect((ctx.sessions as unknown as TestSessions).opened).toEqual([CHILD_ID])
     await fiber.dispose()
-    expect(ctx.conversationEvents.entries()).toEqual([])
+    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toContain('workflow-run')
     expect(ctx.slots.entries('conversation.chat.node')).toEqual([])
 
     const replacement = ctx.plugin({ inject: [...inject], apply })
     await replacement.await()
-    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toEqual(['workflow-run'])
+    expect(ctx.conversationEvents.entries().map(entry => entry.kind)).toContain('workflow-run')
     expect(ctx.slots.entries('conversation.chat.node')).toHaveLength(1)
     await replacement.dispose()
+    await foldFiber.dispose()
+    expect(ctx.conversationEvents.entries()).toEqual([])
   })
 
   it('keeps the node half inert and registers invariant ownership', async () => {

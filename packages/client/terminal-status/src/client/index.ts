@@ -43,6 +43,21 @@ interface SubagentMirrorEntry {
   label?: string
 }
 
+/** Workflow-run chat node data slice. */
+interface WorkflowRunNodeData {
+  name?: string
+  status?: string
+  phases?: readonly {
+    phase: string | null
+    members: readonly { label: string; status: string }[]
+  }[]
+}
+
+/** Deliverables turn-data slice. */
+interface DeliverablesTurnData {
+  produced?: readonly { seq: number; path: string }[]
+}
+
 /**
  * Status plugin body: bind the current session and print the status line.
  * @param ctx - terminal client cordis context.
@@ -74,7 +89,40 @@ export function apply(ctx: Context): void {
     return parts.join('  |  ')
   }
 
+  const renderedWorkflows = new Map<string, string>()
+  const renderedTurns = new Set<number>()
+
+  /** Render durable chat facts: workflow-run nodes and per-turn produced files. */
+  const renderChatFacts = (face: SessionFace): void => {
+    const chat = face.getSnapshot().chat
+    for (const node of chat.nodes.values()) {
+      if (node.kind !== 'workflow-run' || node.visibility !== 'visible') continue
+      const data = node.data as WorkflowRunNodeData | undefined
+      if (data === undefined) continue
+      const lines: string[] = ['workflow ' + (data.name ?? '') + ' [' + (data.status ?? '') + ']']
+      for (const phase of data.phases ?? []) {
+        const members = phase.members.map(member => member.label + ':' + member.status).join(', ')
+        lines.push('  phase ' + (phase.phase ?? '-') + (members === '' ? '' : ' (' + members + ')'))
+      }
+      const key = String(node.anchorSeq)
+      const text = lines.join('\n')
+      if (renderedWorkflows.get(key) === text) continue
+      renderedWorkflows.set(key, text)
+      for (const line of text.split('\n')) terminal.status(line)
+    }
+    for (const turn of chat.timeline.turnOrder) {
+      if (renderedTurns.has(turn)) continue
+      const location = chat.timeline.turns.get(turn)
+      if (location === undefined || location.status !== 'closed') continue
+      renderedTurns.add(turn)
+      const data = location.data.get('deliverables') as DeliverablesTurnData | undefined
+      const paths = data?.produced?.map(entry => entry.path) ?? []
+      if (paths.length > 0) terminal.status('produced: ' + paths.join(', '))
+    }
+  }
+
   const refresh = (face: SessionFace): void => {
+    renderChatFacts(face)
     const line = statusLine(face)
     if (line === lastLine) return
     lastLine = line
@@ -87,6 +135,8 @@ export function apply(ctx: Context): void {
       unsubscribe = undefined
     }
     lastLine = undefined
+    renderedWorkflows.clear()
+    renderedTurns.clear()
     if (face === undefined) return
     unsubscribe = face.subscribe(() => { refresh(face) })
     void face.projections.faceOf('goal').subscribe(() => { refresh(face) })

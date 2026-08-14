@@ -8,7 +8,7 @@ import { shallowEqual, type SessionId, type SessionListState } from '@deepseek-a
 import type { WorkflowRunKey } from './locales.ts'
 import type {
   WorkflowRunMemberData, WorkflowRunPhaseData, WorkflowRunStatus,
-} from './workflow-definition.ts'
+} from '@deepseek-ai/dsh-client-runtime/client'
 import css from './WorkflowRunPanel.module.css'
 
 /** Navigation action injected from the plugin's own SessionRuntime access. */

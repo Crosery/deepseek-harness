@@ -1713,9 +1713,15 @@ importers:
       '@deepseek-ai/dsh-session-title':
         specifier: workspace:^
         version: link:../../session/session-title
+      '@deepseek-ai/dsh-tool-workflow':
+        specifier: workspace:^
+        version: link:../../workflow/tool-workflow
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@deepseek-ai/dsh-workflow':
+        specifier: workspace:^
+        version: link:../../workflow/workflow
       immer:
         specifier: ^10.1.1
         version: 10.2.0
@@ -1806,6 +1812,9 @@ importers:
       '@deepseek-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../connection
       '@deepseek-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime
