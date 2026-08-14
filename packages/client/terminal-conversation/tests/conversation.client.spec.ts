@@ -4,15 +4,17 @@ import { describe, expect, it } from 'vitest'
 import { apply } from '../src/client/index.ts'
 
 /** Stub terminal capturing every write path. */
-function stubTerminal() {
+function stubTerminal(tty = false) {
   const output: string[] = []
   const lines: ((line: string) => void | Promise<void>)[] = []
   const sigints: (() => void)[] = []
   const closes: (() => void)[] = []
+  const dispatches: string[] = []
+  const faceCommands: string[] = []
   return {
     output,
     terminal: {
-      isTTY: false,
+      isTTY: tty,
       width: 80,
       markdown: { renderLine: (line: string) => line, reset: () => {} },
       write: (text: string) => { output.push(text) },
@@ -24,8 +26,10 @@ function stubTerminal() {
       registerNodeRenderer: () => () => {},
       renderNode: () => false,
       registerCommand: () => () => {},
-      dispatchCommand: () => false,
+      dispatchCommand: (line: string) => { dispatches.push(line); return false },
       busy: () => false,
+      nextLine: () => { output.push('<NL>') },
+      clearLine: () => { output.push('<CLR>') },
       onLine: (listener: (line: string) => void | Promise<void>) => { lines.push(listener); return () => {} },
       onSigint: (listener: () => void) => { sigints.push(listener); return () => {} },
       onClose: (listener: () => void) => { closes.push(listener); return () => {} },
@@ -34,6 +38,8 @@ function stubTerminal() {
     lines,
     sigints,
     closes,
+    dispatches,
+    faceCommands,
   }
 }
 
@@ -50,9 +56,9 @@ function snapshot(overrides: Record<string, unknown> = {}): Record<string, unkno
   }
 }
 
-async function boot(startup: Record<string, unknown>, faceOverrides: Record<string, unknown> = {}) {
+async function boot(startup: Record<string, unknown>, faceOverrides: Record<string, unknown> = {}, tty = false) {
   const ctx = new Context()
-  const stub = stubTerminal()
+  const stub = stubTerminal(tty)
   const subscribers = new Set<() => void>()
   let currentSnapshot = snapshot(faceOverrides)
   const prompts: unknown[] = []
@@ -60,7 +66,7 @@ async function boot(startup: Record<string, unknown>, faceOverrides: Record<stri
     getSnapshot: () => currentSnapshot,
     subscribe: (listener: () => void) => { subscribers.add(listener); return () => { subscribers.delete(listener) } },
     prompt: async (parts: unknown) => { prompts.push(parts); return { ok: true, value: { accepted: true } } },
-    command: async () => ({ ok: true, value: { matched: false } }),
+    command: async (line: string) => { stub.faceCommands.push(line); return { ok: true, value: { matched: false } } },
     cancel: async () => ({ ok: true, value: { accepted: true } }),
     projections: { faceOf: () => ({ getSnapshot: () => null, subscribe: () => () => {} }) },
   }
@@ -76,7 +82,24 @@ async function boot(startup: Record<string, unknown>, faceOverrides: Record<stri
   }
   ctx.provide('terminal', stub.terminal)
   ctx.provide('sessions', sessions as never)
-  ctx.provide('connection', { api: { sessions: { selectModel: async () => ({ result: { ok: true } }) } } } as never)
+  ctx.provide('connection', {
+    api: {
+      sessions: {
+        selectModel: async () => ({ result: { ok: true } }),
+        models: async () => ({
+          result: {
+            ok: true,
+            value: {
+              current: { provider: 'deepseek-official', model: 'deepseek-chat' },
+              routable: true,
+              groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-chat', name: 'deepseek-chat' }] }],
+              failures: [],
+            },
+          },
+        }),
+      },
+    },
+  } as never)
   ctx.provide('cliStartup', startup)
   await ctx.plugin(ConversationEventRegistry).await()
   await ctx.plugin(ConversationViewRegistry).await()
@@ -100,8 +123,19 @@ describe('terminal-conversation plugin', () => {
       partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'hi ' }] },
       running: true,
     })
+    emit({
+      partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'hi there' }] },
+      running: true,
+    })
+    emit({
+      partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'hi there\ncool' }] },
+      running: true,
+    })
     expect(stub.output.join('\n')).toContain('> hello')
-    expect(stub.output.join('')).toContain('hi ')
+    // the tail rewrites as the full grown line, never a lone delta fragment;
+    // a completing delta prints the whole line (prefix + fragment) once
+    expect(stub.output).toContain('hi there')
+    expect(stub.output).toContain('cool')
   })
 
   it('sends plain lines as prompts and slash lines through the dispatch fallback', async () => {
@@ -111,7 +145,66 @@ describe('terminal-conversation plugin', () => {
     expect(handler).toBeDefined()
     await handler?.('do the thing')
     await handler?.('/plan on')
-    expect(stub.output.length).toBeGreaterThanOrEqual(0)
+    expect(stub.dispatches).toEqual(['/plan on'])
+    expect(stub.faceCommands).toEqual(['/plan on'])
+  })
+
+  it('normalizes backslash command lines to the slash form', async () => {
+    const { stub, setCurrent } = await boot({ task: undefined })
+    setCurrent('session-1')
+    const handler = stub.lines[0]
+    await handler?.('\\plan on')
+    expect(stub.dispatches).toEqual(['/plan on'])
+    expect(stub.faceCommands).toEqual(['/plan on'])
+  })
+
+  it('advances on empty delta lines without printing blank rows', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({ partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'first' }] }, running: true })
+    emit({ partial: { turn: 1, step: 1, blocks: [{ kind: 'text', text: 'first\n\nsecond' }] }, running: true })
+    // no empty print rows: the streamed tail and the <NL> advance only
+    expect(stub.output).not.toContain('')
+    expect(stub.output).toContain('<NL>')
+    expect(stub.output.join('|')).toContain('second')
+  })
+
+  it('keeps streamed reasoning behind the pulse and renders it dimmed at settle', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({
+      partial: { turn: 1, step: 1, blocks: [{ kind: 'reasoning', text: 'thinking now' }] },
+      running: true,
+    })
+    // non-TTY: no spinner writes, and the reasoning never streams as text
+    expect(stub.output.join('')).not.toContain('thinking now')
+    emit({
+      nodes: [{
+        kind: 'assistant',
+        seq: 2,
+        messageId: 'm1',
+        time: 1,
+        turn: 1,
+        step: 1,
+        blocks: [{ kind: 'reasoning', text: 'thinking now' }],
+        usage: undefined,
+        timing: null,
+      }],
+      partial: null,
+      running: false,
+    })
+    expect(stub.output.join('')).toContain('· thinking now')
+  })
+
+  it('prints the welcome box for a blank interactive session with the active model', async () => {
+    const { stub, setCurrent } = await boot({ task: undefined }, { composerPhase: 'blank' }, true)
+    setCurrent('session-1')
+    await new Promise<void>((resolve) => { setTimeout(resolve, 5) })
+    const transcript = stub.output.join('\n')
+    expect(transcript).toContain('╭')
+    expect(transcript).toContain('DeepSeek Harness')
+    expect(transcript).toContain('deepseek-official:deepseek-chat')
+    expect(transcript).toContain('Tip:')
   })
 
   it('queues early lines until a session binds', async () => {

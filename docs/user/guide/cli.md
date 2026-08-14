@@ -28,6 +28,19 @@ dsh cli --cwd <dir> --model provider/model --permission workspace-write
 Approval and ask_user_question prompts render inline and switch the input
 line into answer mode. `@path/to/image.png` attaches an image.
 
+## Display
+
+A blank interactive session opens with a welcome box: the pixel whale, the
+active model, and the command hints. While the model reasons, the input line
+shows a pulsing `⠋ thinking…` instead of the raw reasoning stream; the
+settled reasoning prints once, dimmed with a `·` prefix, and the answer
+streams line by line in place.
+
+Typing `/` or `\` opens the live command menu under the input: client
+commands, host commands, and the session's skills, filtered as you type, with
+the cursor on the first match and descriptions beside each entry. `⏎` runs
+the line; both prefixes dispatch identically.
+
 ## Memory
 
 For the lowest footprint, run with a bounded heap:

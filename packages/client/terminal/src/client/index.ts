@@ -13,6 +13,7 @@ import z from '@deepseek-ai/schemastery'
 import { AnsiMarkdown } from './markdown.ts'
 import { TerminalWriter } from './output.ts'
 import { InputReader } from './input.ts'
+import { dsBlue, dsDim } from './ansi.ts'
 
 export { ansiEnabled, sgr, SGR, dsBlue, dsDim, rgb } from './ansi.ts'
 export { AnsiMarkdown } from './markdown.ts'
@@ -124,8 +125,30 @@ export interface TerminalService {
    * @returns disposer removing the listener.
    */
   onClose(listener: () => void): () => void
+  /**
+   * Advance to the next line without clearing the current one (the blank-line
+   * primitive: streaming deltas model their own newlines).
+   */
+  nextLine(): void
+  /** Clear the current line in place (the cursor stays put). */
+  clearLine(): void
+  /**
+   * Set the live command-hint provider: called on every current-line change;
+   * a returned item list renders as a popup menu under the input, null clears
+   * it. Both '/' and '\' begin a command line.
+   * @param provider - the hint provider, or undefined to disable.
+   */
+  setHintProvider(provider: ((line: string) => readonly HintItem[] | null) | undefined): void
   /** Close input and restore the terminal. */
   close(): void
+}
+
+/** One entry of the live command-hint menu. */
+export interface HintItem {
+  /** The command label shown in the menu (e.g. '/help'). */
+  label: string
+  /** Optional one-line description shown dimmed next to the label. */
+  description?: string
 }
 
 /** Stable Cordis plugin name. */
@@ -144,6 +167,33 @@ export const Config: z<TerminalConfig> = z.object({
   prompt: z.string().default('❯ '),
 })
 
+/** How many command rows the live hint menu shows before truncating. */
+const MENU_MAX_ITEMS = 6
+/** Fixed label column so rows align like omp's select-list. */
+const MENU_LABEL_WIDTH = 22
+
+/**
+ * Layout the live hint menu: a blue cursor row, dimmed rows, and a dim
+ * footer with the match count — omp's select-list look on one menu.
+ * @param items - the filtered hint items.
+ * @param termWidth - terminal columns (descriptions truncate to fit).
+ * @returns the menu lines (each fully themed, never longer than termWidth).
+ */
+export function renderHintMenu(items: readonly HintItem[], termWidth: number): string[] {
+  const shown = items.slice(0, MENU_MAX_ITEMS)
+  const descBudget = Math.max(6, termWidth - MENU_LABEL_WIDTH - 4)
+  const rows = shown.map((item, index) => {
+    const label = item.label.padEnd(MENU_LABEL_WIDTH)
+    const description = (item.description ?? '').slice(0, descBudget)
+    const selected = index === 0
+    return (selected ? dsBlue('>') : ' ') + ' ' + (selected ? dsBlue(label) : dsDim(label)) + ' ' + dsDim(description)
+  })
+  const count = (items.length > shown.length ? shown.length + '/' : '') + items.length
+    + (items.length === 1 ? ' match' : ' matches')
+  const footer = dsDim(count + ' · ⏎ run · type to filter')
+  return [...rows, footer]
+}
+
 /**
  * Kernel plugin body: create the writer/reader pair and provide the
  * terminal service. Disposal closes input and restores the terminal.
@@ -153,23 +203,61 @@ export const Config: z<TerminalConfig> = z.object({
 export function apply(ctx: Context, config: TerminalConfig): void {
   const writer = new TerminalWriter(process.stdout)
   const input = new InputReader(process.stdin, writer,  process.stdin.isTTY)
+  const terminalWidth = process.stdout.columns || 80
   let currentPrompt = config.prompt
   let started = false
   const lineListeners = new Set<(line: string) => void | Promise<void>>()
   const nodeRenderers = new Map<string, (node: unknown) => void>()
   const commandHandlers = new Map<string, (args: string) => void | Promise<void>>()
   let commandBusy = 0
+  let hintProvider: ((line: string) => readonly HintItem[] | null) | undefined
+  let hintLines = 0
+  let hintBufferDispose: (() => void) | undefined
+  let promptDirty = false
+  // The hint menu borrows omp's select-list look: a dim rounded box under the
+  // input, a blue cursor on the first match, dim descriptions, and a dim
+  // footer. Readline keeps owning the editor; the menu only ever previews.
+  const clearHint = (): void => {
+    if (hintLines === 0 || !writer.isTTY) return
+    let bytes = '\u001b7\u001b[1B'
+    for (let index = 0; index < hintLines; index += 1) bytes += '\r\u001b[K\u001b[1B'
+    writer.raw(bytes + '\u001b8')
+    hintLines = 0
+  }
   const preLineHooks = new Set<(line: string) => void | Promise<void> | boolean | Promise<boolean>>()
   const service: TerminalService = {
     isTTY: writer.isTTY,
-    width: process.stdout.columns || 80,
+    width: terminalWidth,
     markdown: new AnsiMarkdown(),
-    write: (text) => { writer.write(text) },
-    stream: (text) => { writer.writeStream(text) },
-    print: (text) => { writer.print(text) },
-    status: (text) => { writer.status(text) },
+    write: (text) => {
+      promptDirty = true
+      writer.write(text)
+    },
+    stream: (text) => {
+      clearHint()
+      promptDirty = true
+      writer.writeStream(text)
+    },
+    print: (text) => {
+      promptDirty = true
+      writer.print(text)
+    },
+    status: (text) => {
+      promptDirty = true
+      writer.status(text)
+    },
+    nextLine: () => {
+      clearHint()
+      promptDirty = true
+      writer.raw('\n')
+    },
+    clearLine: () => {
+      clearHint()
+      writer.clearLine()
+    },
     setPrompt: (text) => {
       currentPrompt = text
+      promptDirty = false
       if (started) input.setPrompt(text)
     },
     registerNodeRenderer: (kind, renderer) => {
@@ -207,7 +295,12 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     },
     busy: () => commandBusy > 0,
     refreshPrompt: () => {
-      if (started) input.setPrompt(currentPrompt)
+      // The prompt redraws only when output consumed its line since the last
+      // draw — idle snapshot updates must not replay the prompt (no flicker,
+      // no erase of the line below).
+      if (!started || !promptDirty) return
+      input.setPrompt(currentPrompt)
+      promptDirty = false
     },
     onLine: (listener) => {
       lineListeners.add(listener)
@@ -232,6 +325,26 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     onSigint: listener => input.onSigint(listener),
     onClose: listener => input.onClose(listener),
     close: () => { input.close() },
+    setHintProvider: (provider) => {
+      hintProvider = provider
+      if (hintBufferDispose === undefined) {
+        hintBufferDispose = input.onBufferChange((line) => {
+          const items = hintProvider?.(line) ?? null
+          if (!writer.isTTY) return
+          clearHint()
+          if (items === null || items.length === 0) return
+          const menu = renderHintMenu(items, terminalWidth)
+          hintLines = menu.length
+          let bytes = '\u001b7\u001b[1B'
+          for (const menuLine of menu) {
+            bytes += '\r\u001b[K' + menuLine + '\u001b[1B'
+          }
+          writer.raw(bytes + '\u001b8')
+        })
+      } else if (provider === undefined) {
+        clearHint()
+      }
+    },
   }
   ctx.provide('terminal', service)
   ctx.effect(() => () => { input.close() }, 'terminal: input teardown')

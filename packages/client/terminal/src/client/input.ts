@@ -8,11 +8,20 @@
 import readline from 'node:readline'
 import type { TerminalWriter } from './output.ts'
 
+/** The keypress event fields the buffer tracker reads. */
+interface Key {
+  name?: string
+  sequence?: string
+  ctrl?: boolean
+}
+
 /** One line reader bound to stdin, redrawing its prompt through the writer. */
 export class InputReader {
   private rl: readline.Interface | undefined
   private readonly sigintListeners = new Set<() => void>()
   private readonly closeListeners = new Set<() => void>()
+  private readonly bufferListeners = new Set<(line: string) => void>()
+  private keypressHandler: ((chunk: string, key: Key) => void) | undefined
   private started = false
   private closed = false
 
@@ -38,6 +47,44 @@ export class InputReader {
     if (this.started) throw new Error('terminal: input reader already started')
     if (this.closed) throw new Error('terminal: input reader already closed')
     this.started = true
+    // Keypress tracking feeds the live slash-hint line; the Interface keeps
+    // owning the line editor, both consume the same stream.
+    readline.emitKeypressEvents(this.stdin)
+    let buffer = ''
+    this.keypressHandler = (_chunk, key) => {
+      const sequence = key.sequence ?? ''
+      if (key.ctrl && key.name === 'c') {
+        buffer = ''
+        this.emitBuffer(buffer)
+        return
+      }
+      if (key.name === 'return' || sequence === '\r' || sequence === '\n') {
+        buffer = ''
+        this.emitBuffer(buffer)
+        return
+      }
+      if (key.name === 'backspace' || sequence === '\x7f' || sequence === '\b') {
+        buffer = buffer.slice(0, -1)
+        this.emitBuffer(buffer)
+        return
+      }
+      if (key.ctrl && key.name === 'u') {
+        buffer = ''
+        this.emitBuffer(buffer)
+        return
+      }
+      if (key.ctrl && key.name === 'w') {
+        buffer = buffer.replace(/\S+\s*$/, '')
+        this.emitBuffer(buffer)
+        return
+      }
+      // Arrow keys, escapes, and control sequences never reach the buffer.
+      if (sequence.length === 1 && sequence >= ' ') {
+        buffer += sequence
+        this.emitBuffer(buffer)
+      }
+    }
+    this.stdin.on('keypress', this.keypressHandler)
     const rl = readline.createInterface({
       input: this.stdin,
       output: this.writer.isTTY ? process.stdout : undefined,
@@ -82,6 +129,27 @@ export class InputReader {
   }
 
   /**
+   * Register a listener fired on every current-line buffer change (the live
+   * slash-hint seat).
+   * @param listener - the listener receiving the in-progress line.
+   * @returns disposer removing the listener.
+   */
+  onBufferChange(listener: (line: string) => void): () => void {
+    this.bufferListeners.add(listener)
+    return () => { this.bufferListeners.delete(listener) }
+  }
+
+  private emitBuffer(line: string): void {
+    for (const listener of [...this.bufferListeners]) {
+      try {
+        listener(line)
+      } catch (error) {
+        this.writer.print(String(error))
+      }
+    }
+  }
+
+  /**
    * Register a listener fired once the reader closed (terminal restored).
    * @param listener - the listener.
    * @returns disposer removing the listener.
@@ -106,6 +174,10 @@ export class InputReader {
   close(): void {
     if (this.closed) return
     this.closed = true
+    if (this.keypressHandler !== undefined) {
+      this.stdin.off('keypress', this.keypressHandler)
+      this.keypressHandler = undefined
+    }
     this.rl?.close()
     this.rl = undefined
   }

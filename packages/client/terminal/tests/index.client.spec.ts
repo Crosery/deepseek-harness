@@ -1,7 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { apply, inject, name } from '../src/client/index.ts'
-import type { TerminalService } from '../src/client/index.ts'
+import { apply, inject, name, renderHintMenu } from '../src/client/index.ts'
+import type { HintItem, TerminalService } from '../src/client/index.ts'
 
 function boot(): { ctx: Context; terminal: TerminalService } {
   const ctx = new Context()
@@ -29,7 +29,88 @@ describe('terminal kernel plugin', () => {
     expect(typeof terminal.registerCommand).toBe('function')
     expect(typeof terminal.registerPreLineHook).toBe('function')
     expect(typeof terminal.busy).toBe('function')
+    expect(typeof terminal.setHintProvider).toBe('function')
+    expect(typeof terminal.nextLine).toBe('function')
+    expect(typeof terminal.clearLine).toBe('function')
     expect(terminal.markdown).toBeDefined()
+  })
+
+  it('routes the live hint provider through input buffer changes', () => {
+    const { terminal } = boot()
+    const seen: ({ label: string }[] | null)[] = []
+    terminal.setHintProvider((line) => {
+      const items = line === '' ? null : [{ label: '/' + line }]
+      seen.push(items)
+      return items
+    })
+    terminal.onLine(() => {})
+    const press = (name: string, sequence: string, ctrl = false): void => {
+      process.stdin.emit('keypress', sequence, { name, sequence, ctrl })
+    }
+    press('s', 's')
+    press('e', 'e')
+    press('backspace', '\x7f')
+    press('u', '\u0015', true)
+    press('w', 'w')
+    press('o', 'o')
+    press('r', 'r')
+    press('d', 'd')
+    press('w', 'w', true)
+    press('return', '\r')
+    expect(seen).toEqual([
+      [{ label: '/s' }],
+      [{ label: '/se' }],
+      [{ label: '/s' }],
+      null,
+      [{ label: '/w' }],
+      [{ label: '/wo' }],
+      [{ label: '/wor' }],
+      [{ label: '/word' }],
+      null,
+      null,
+    ])
+    // The latest provider wins; undefined disables the seat entirely.
+    terminal.setHintProvider((line) => {
+      const items = line === '' ? null : [{ label: '#2:' + line }]
+      seen.push(items)
+      return items
+    })
+    press('x', 'x')
+    expect(seen.at(-1)).toEqual([{ label: '#2:x' }])
+    terminal.setHintProvider(undefined)
+    press('y', 'y')
+    expect(seen.at(-1)).toEqual([{ label: '#2:x' }])
+    terminal.close()
+  })
+
+  it('layouts the hint menu with a cursor row and a count footer', () => {
+    const items: HintItem[] = [
+      { label: '/help', description: 'list commands' },
+      { label: '/model', description: 'pick a model' },
+    ]
+    const lines = renderHintMenu(items, 80)
+    expect(lines.length).toBe(3)
+    expect(lines[0]).toContain('>')
+    expect(lines[0]).toContain('/help')
+    expect(lines[0]).toContain('list commands')
+    expect(lines[1]).toContain('/model')
+    expect(lines[1]).not.toContain('>')
+    expect(lines[2]).toContain('2 matches')
+    expect(lines[2]).toContain('run')
+  })
+
+  it('caps the hint menu at six rows and truncates descriptions', () => {
+    const items: HintItem[] = Array.from({ length: 9 }, (_, index) => ({
+      label: '/command-' + index,
+      description: 'x'.repeat(100),
+    }))
+    const lines = renderHintMenu(items, 40)
+    // six item rows + footer
+    expect(lines.length).toBe(7)
+    expect(lines[6]).toContain('6/9 matches')
+    for (const line of lines.slice(0, 6)) {
+      expect(line.length).toBeLessThanOrEqual(40)
+    }
   })
 
   it('dispatches node renderers with fallback and single ownership', () => {

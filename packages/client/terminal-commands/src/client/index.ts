@@ -10,7 +10,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client-node'
 import type { SessionRuntime } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { ansiEnabled, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, sgr, SGR, type HintItem } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-commands'
@@ -60,6 +60,59 @@ export function apply(ctx: Context): void {
   }
 
   ctx.effect(() => terminal.registerCommand('help', printHelp), 'terminal-commands: /help')
+
+  // Live command hints: typing '/' or '\' opens an omp-style menu under
+  // the input — client commands, host commands, and the session's skills,
+  // filtered by prefix as the user types.
+  const HOST_COMMANDS: readonly HintItem[] = [
+    { label: '/plan', description: 'enter plan mode' },
+    { label: '/goal', description: 'create or resume a goal' },
+    { label: '/compact', description: 'compact the context window' },
+    { label: '/permission', description: 'choose the permission mode' },
+    { label: '/feedback', description: 'rate the last answer' },
+    { label: '/export', description: 'export the session log' },
+    { label: '/skill', description: 'run a skill by name' },
+  ]
+  let skillItems: HintItem[] = []
+  let skillsLoading = false
+  ctx.effect(() => {
+    terminal.setHintProvider((line) => {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('/') && !trimmed.startsWith('\\')) return null
+      const query = trimmed.slice(1).toLowerCase()
+      if (query === '' && skillItems.length === 0 && !skillsLoading) {
+        const current = sessions.list.getSnapshot().current
+        if (current !== undefined) {
+          skillsLoading = true
+          void Promise.resolve()
+            .then(() => connection.api.skills.list({ sessionId: current }))
+            .then((response) => {
+              if (response.result.ok) {
+                skillItems = response.result.value.skills.map(skill => ({
+                  label: '/' + skill.name,
+                  description: skill.description,
+                }))
+              }
+            })
+            .catch(() => {
+              // The catalog is optional hint garnish: keep client and host
+              // commands in the menu when it fails or never arrives.
+            })
+            .finally(() => { skillsLoading = false })
+        }
+      }
+      const candidates: HintItem[] = [
+        ...Object.entries(help).map(([name, entry]) => ({ label: '/' + name, description: entry.summary })),
+        ...HOST_COMMANDS,
+        ...skillItems,
+      ]
+      // First item wins on a duplicate label (client commands shadow hosts).
+      const matches = [...new Map(candidates.map(item => [item.label, item])).values()]
+        .filter(item => item.label.slice(1).startsWith(query))
+      return matches.length === 0 ? null : matches.slice(0, 10)
+    })
+    return () => { terminal.setHintProvider(undefined) }
+  }, 'terminal-commands: slash hints')
 
   ctx.effect(() => terminal.registerCommand('sessions', (args) => {
     const snapshot = sessions.list.getSnapshot()

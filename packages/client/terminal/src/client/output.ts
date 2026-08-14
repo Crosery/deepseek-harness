@@ -49,6 +49,17 @@ export class TerminalWriter {
     this.print('\u001b[2m' + text + '\u001b[0m')
   }
 
+  /**
+   * Write raw control bytes without the automatic current-line clear. The
+   * hint-line cursor save/restore dance is one atomic sequence and must not
+   * clear the input line it departs from.
+   * @param text - the raw control sequence.
+   */
+  raw(text: string): void {
+    if (text === '') return
+    this.stream.write(text)
+  }
+
   /** Clear the current line (raw ANSI; no-op when the stream is not a TTY). */
   clearLine(): void {
     if (!this.isTTY) return

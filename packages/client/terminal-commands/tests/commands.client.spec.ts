@@ -6,9 +6,11 @@ import { apply } from '../src/client/index.ts'
 function stubTerminal() {
   const prints: string[] = []
   const commands = new Map<string, (args: string) => void | Promise<void>>()
+  let hintProvider: ((line: string) => readonly { label: string; description?: string }[] | null) | undefined
   return {
     prints,
     commands,
+    get hint() { return hintProvider },
     terminal: {
       print: (text = '') => { prints.push(text) },
       status: (text: string) => { prints.push(text) },
@@ -18,6 +20,7 @@ function stubTerminal() {
         commands.set(name, handler)
         return () => { commands.delete(name) }
       },
+      setHintProvider: (provider: typeof hintProvider) => { hintProvider = provider },
       dispatchCommand: () => false,
       busy: () => false,
       registerNodeRenderer: () => () => {},
@@ -28,6 +31,9 @@ function stubTerminal() {
       onClose: () => () => {},
       close: () => {},
       write: () => {},
+      stream: () => {},
+      nextLine: () => {},
+      clearLine: () => {},
       refreshPrompt: () => {},
       isTTY: false,
       width: 80,
@@ -64,9 +70,14 @@ function boot() {
   const ctx = new Context()
   const stub = stubTerminal()
   const sessions = sessionsDouble()
+  const skills = {
+    list: async () => ({
+      result: { ok: true, value: { skills: [{ name: 'math-helper', description: 'solves math', modelInvocable: true }] } },
+    }),
+  }
   ctx.provide('terminal', stub.terminal)
   ctx.provide('sessions', sessions.sessions)
-  ctx.provide('connection', { api: {} })
+  ctx.provide('connection', { api: { skills } })
   ctx.provide('remote', { messageFeedback: { put: async () => ({}) } })
   apply(ctx)
   return { stub, sessions, ctx }
@@ -94,5 +105,37 @@ describe('terminal-commands plugin', () => {
     const { stub } = boot()
     await stub.commands.get('memory')?.('')
     expect(stub.prints.some(line => /rss [\d.]+ MB/.test(line))).toBe(true)
+  })
+
+  it('hints the command menu for slash and backslash lines', () => {
+    const { stub } = boot()
+    expect(stub.hint).toBeDefined()
+    expect(stub.hint?.('plain text')).toBeNull()
+    const all = stub.hint?.('/') ?? []
+    const labels = all.map(item => item.label)
+    expect(labels).toContain('/help')
+    expect(labels).toContain('/model')
+    expect(labels).toContain('/plan')
+    expect(all.length).toBeLessThanOrEqual(10)
+    expect(all.find(item => item.label === '/help')?.description).toContain('list commands')
+    const skillPick = stub.hint?.('/sk') ?? []
+    expect(skillPick.map(item => item.label)).toEqual(['/skills', '/skill'])
+    const filtered = stub.hint?.('/se') ?? []
+    expect(filtered.map(item => item.label)).toEqual(['/sessions', '/settings'])
+    expect(stub.hint?.('\\se')).toEqual(filtered)
+    expect(stub.hint?.('/zzz')).toBeNull()
+  })
+
+  it('adds session skills to the hint menu once the catalog resolves', async () => {
+    const { stub, sessions } = boot()
+    sessions.setCurrent('session-a')
+    stub.hint?.('/')
+    await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
+    const math = stub.hint?.('/m') ?? []
+    const labels = math.map(item => item.label)
+    expect(labels).toContain('/math-helper')
+    expect(labels).toContain('/memory')
+    expect(labels).toContain('/model')
+    expect(math.find(item => item.label === '/math-helper')?.description).toContain('solves math')
   })
 })

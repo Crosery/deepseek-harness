@@ -38,6 +38,14 @@ function textOf(blocks: readonly TextCarrying[]): string {
     .join('')
 }
 
+/** Reasoning content of a block list (reasoning blocks only). */
+function reasoningOf(blocks: readonly TextCarrying[]): string {
+  return blocks
+    .filter(block => (block.type ?? block.kind) === 'reasoning')
+    .map(block => typeof block.text === 'string' ? block.text : '')
+    .join('')
+}
+
 /** Render one text block as markdown lines. */
 function renderBlock(terminal: TerminalService, text: string): void {
   for (const line of text.split('\n')) {
@@ -78,7 +86,15 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
             text = text.slice(streamed.text.length)
           }
           if (text !== '') renderBlock(terminal, text)
-        } else if (block.kind === 'reasoning') renderBlock(terminal, (ansiEnabled ? dsDim('· ') : '· ') + block.text)
+        } else if (block.kind === 'reasoning') {
+          // The settled reasoning renders dimmed, one · line per source line
+          // (the live stream only ever showed the pulse, so nothing repeats).
+          const reasoning = block.text.replace(/^\n+/, '').replace(/\n+$/, '')
+          if (reasoning === '') return
+          for (const line of reasoning.split('\n')) {
+            terminal.print(ansiEnabled ? dsDim('· ' + line) : '· ' + line)
+          }
+        }
       }
       return
     }
@@ -145,6 +161,34 @@ export function apply(ctx: Context): void {
   let closing = false
   let workPending = false
 
+  // omp hides the reasoning stream behind a live pulse; the settled block
+  // renders dimmed at finalize. The spinner owns one line and clears it when
+  // visible text (or the settled state) takes over. Piped runs never animate.
+  const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  let spinnerOn = false
+  let spinnerFrame = 0
+  let spinnerTimer: ReturnType<typeof setInterval> | undefined
+  const stopSpinner = (): void => {
+    if (!spinnerOn) return
+    spinnerOn = false
+    if (spinnerTimer !== undefined) {
+      clearInterval(spinnerTimer)
+      spinnerTimer = undefined
+    }
+    terminal.clearLine()
+  }
+  const ensureSpinner = (): void => {
+    if (spinnerOn || !terminal.isTTY) return
+    spinnerOn = true
+    const tick = (): void => {
+      const frame = SPINNER_FRAMES[spinnerFrame % SPINNER_FRAMES.length] ?? '⠋'
+      spinnerFrame += 1
+      terminal.stream(dsBlue(frame) + ' ' + dsDim('thinking…'))
+    }
+    tick()
+    spinnerTimer = setInterval(tick, 80)
+  }
+
   const maybeExit = (): void => {
     if (!closing) return
     if (terminal.busy()) {
@@ -176,11 +220,14 @@ export function apply(ctx: Context): void {
     if (face.getSnapshot().pending.length > 0) return
     const trimmed = line.trim()
     if (trimmed === '') return
-    if (trimmed.startsWith('/')) {
+    if (trimmed.startsWith('/') || trimmed.startsWith('\\')) {
+      // Both prefixes open a command line; normalize backslash to slash so
+      // the client dispatcher and the host registry see one canonical form.
+      const commandLine = trimmed.startsWith('\\') ? '/' + trimmed.slice(1) : trimmed
       // Client-side commands win; unknown ones fall through to the host
       // command registry (plan/goal/compact/permission/feedback/export).
-      if (!terminal.dispatchCommand(line)) {
-        await face.command(line)
+      if (!terminal.dispatchCommand(commandLine)) {
+        await face.command(commandLine)
       }
     } else {
       workPending = true
@@ -212,28 +259,50 @@ export function apply(ctx: Context): void {
     if (snapshot.partial === null && partialText === '' && streamed !== undefined) streamed = undefined
     if (snapshot.partial !== null) {
       const text = textOf(snapshot.partial.blocks)
-      if (text.startsWith(partialText)) {
-        const delta = text.slice(partialText.length)
-        const lines = delta.split('\n')
-        for (const line of lines.slice(0, -1)) {
-          terminal.print(terminal.markdown.renderLine(line))
-        }
-        const tail = lines[lines.length - 1] ?? ''
-        if (tail !== '') terminal.stream(tail)
+      const reasoning = reasoningOf(snapshot.partial.blocks)
+      if (text === '' && reasoning.trim() !== '') {
+        ensureSpinner()
       } else {
-        if (partialText !== '') terminal.print()
-        terminal.markdown.reset()
-        for (const line of text.split('\n').slice(0, -1)) {
-          terminal.print(terminal.markdown.renderLine(line))
+        stopSpinner()
+        const fresh = !text.startsWith(partialText)
+        if (fresh) {
+          if (partialText !== '') terminal.print()
+          terminal.markdown.reset()
+          for (const line of text.split('\n').slice(0, -1)) {
+            if (line === '') terminal.nextLine()
+            else terminal.print(terminal.markdown.renderLine(line))
+          }
+        } else {
+          // The delta's first piece completes the line that was streaming;
+          // print the whole line (previous tail + fragment), never the lone
+          // fragment — the accumulated prefix must survive the rewrite.
+          const pieces = text.slice(partialText.length).split('\n')
+          if (pieces.length > 1) {
+            const previousTail = partialText.slice(partialText.lastIndexOf('\n') + 1)
+            const finished = previousTail + (pieces[0] ?? '')
+            if (finished === '') terminal.nextLine()
+            else terminal.print(terminal.markdown.renderLine(finished))
+            for (const line of pieces.slice(1, -1)) {
+              // Deltas model their own newlines: an empty completed line only
+              // advances the cursor — no cleared blank row between fragments.
+              if (line === '') terminal.nextLine()
+              else terminal.print(terminal.markdown.renderLine(line))
+            }
+          }
         }
-        const tail = text.split('\n').at(-1) ?? ''
+        // The tail is the full current line (never the raw delta fragment):
+        // each rewrite replaces the line with the grown text in place.
+        const tail = text.slice(text.lastIndexOf('\n') + 1)
         if (tail !== '') terminal.stream(tail)
+        partialText = text
+        streamed = { turn: snapshot.partial.turn, step: snapshot.partial.step, text }
       }
-      partialText = text
-      streamed = { turn: snapshot.partial.turn, step: snapshot.partial.step, text }
-    } else if (partialText !== '') {
-      partialText = ''
-      terminal.print()
+    } else {
+      stopSpinner()
+      if (partialText !== '') {
+        partialText = ''
+        terminal.print()
+      }
     }
     if (snapshot.running) workPending = false
     if (snapshot.promptError !== null) workPending = false
@@ -264,13 +333,32 @@ export function apply(ctx: Context): void {
     const binding = sessions.binding(id)
     if (binding === undefined) return
     const face: SessionFace = binding.session
-    // The pixel whale greets exactly one blank interactive session (never
-    // piped or print-mode runs, whose transcript must stay clean).
+    // The welcome box greets exactly one blank interactive session (never
+    // piped or print-mode runs, whose transcript must stay clean). The model
+    // line arrives with the catalog fetch, like omp's welcome lists the
+    // active model; the box renders either way.
     if (!bannerShown && terminal.isTTY && startup.task === undefined) {
       bannerShown = true
       if (face.getSnapshot().composerPhase === 'blank') {
-        for (const line of renderBanner()) terminal.print(line)
-        terminal.print()
+        const showBanner = (model: string | undefined): void => {
+          for (const line of renderBanner(terminal.width, model)) terminal.print(line)
+          terminal.print()
+          terminal.refreshPrompt()
+        }
+        void connection.api.sessions.models({ sessionId: id }).then((response) => {
+          if (!response.result.ok) {
+            showBanner(undefined)
+            return
+          }
+          const models = response.result.value
+          const current = models.current
+          const entry = models.groups
+            .flatMap(group => group.models.map(item => ({ provider: group.id, item })))
+            .find(candidate => candidate.provider === current.provider && candidate.item.id === current.model)
+          showBanner(entry === undefined
+            ? current.provider + ':' + current.model
+            : current.provider + ':' + (entry.item.name === entry.item.id ? entry.item.id : entry.item.name))
+        }).catch(() => { showBanner(undefined) })
       }
     }
     unsubscribe = face.subscribe(() => { renderDelta(face) })
