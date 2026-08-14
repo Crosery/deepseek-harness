@@ -1,6 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
-import { apply, argsPreview, describeToolCall, inject, name, renderHintMenu } from '../src/client/index.ts'
+import { apply, argsPreview, describeToolCall, inject, name, renderHintMenu, truncateVisible, visibleWidth } from '../src/client/index.ts'
 import type { HintItem, TerminalService } from '../src/client/index.ts'
 
 function boot(): { ctx: Context; terminal: TerminalService } {
@@ -191,5 +191,17 @@ describe('tool call labels', () => {
 
   it('caps overlong previews', () => {
     expect(argsPreview('{"input":"' + 'x'.repeat(200) + '"}').length).toBe(80)
+  })
+
+  it('measures display width with CJK glyphs as two columns', () => {
+    expect(visibleWidth('abc')).toBe(3)
+    expect(visibleWidth('你好')).toBe(4)
+    expect(visibleWidth('a你b')).toBe(4)
+  })
+
+  it('truncates plain text to a column budget with an ellipsis', () => {
+    expect(truncateVisible('short', 10)).toBe('short')
+    expect(truncateVisible('abcdefghij', 5)).toBe('abcd…')
+    expect(truncateVisible('你好好好好', 5)).toBe('你好…')
   })
 })

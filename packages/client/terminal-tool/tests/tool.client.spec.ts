@@ -29,6 +29,7 @@ describe('tool result rendering', () => {
     const prints: string[] = []
     const renderers = new Map<string, (raw: unknown) => void>()
     ctx.provide('terminal', {
+      width: 80,
       print: (text = '') => { prints.push(text) },
       status: (text: string) => { prints.push(text) },
       registerNodeRenderer: (kind: string, renderer: (raw: unknown) => void) => {
@@ -62,9 +63,13 @@ describe('tool result rendering', () => {
         subCalls: [],
       }],
     })
-    expect(prints[0]).toContain('✓ read: read src · 1.0s')
-    expect(prints).toContain('  file body')
-    expect(prints.join('\n')).toContain('  ✗ grep: x · 0.2s')
+    // the framed card: tool name on the top border, status row, dim preview,
+    // and the nested subcall row inside the same box
+    expect(prints[0]).toContain('╭─ read ')
+    expect(prints[1]).toContain('✓ read: read src · 1.0s')
+    expect(prints.join('')).toContain('file body')
+    expect(prints.join('')).toContain('✗ grep: x · 0.2s')
+    expect(prints.at(-1)).toContain('╰')
   })
 
   it('renders a command outcome like a tool row', () => {
@@ -72,6 +77,7 @@ describe('tool result rendering', () => {
     const prints: string[] = []
     const renderers = new Map<string, (raw: unknown) => void>()
     ctx.provide('terminal', {
+      width: 80,
       print: (text = '') => { prints.push(text) },
       status: () => {},
       registerNodeRenderer: (kind: string, renderer: (raw: unknown) => void) => {

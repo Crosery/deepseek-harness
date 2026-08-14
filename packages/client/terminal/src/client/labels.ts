@@ -53,3 +53,39 @@ export function describeToolCall(
   if (title !== undefined && title !== '') return title
   return argsPreview(argsRaw)
 }
+
+/** Characters a terminal renders two columns wide (CJK, fullwidth forms). */
+const WIDE_CHAR = /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff01-\uff60\uffe0-\uffe6]/
+
+/**
+ * Terminal-column width of plain text (no ANSI escapes), counting CJK and
+ * fullwidth glyphs as two columns — the metric box borders and row padding
+ * must agree on so no row wraps out of its frame.
+ * @param text - plain text.
+ * @returns its display width in columns.
+ */
+export function visibleWidth(text: string): number {
+  let width = 0
+  for (const char of text) width += WIDE_CHAR.test(char) ? 2 : 1
+  return width
+}
+
+/**
+ * Truncate plain text to a display-column budget, appending an ellipsis —
+ * headers and box rows stay single-line like omp's flattened status lines.
+ * @param text - plain text.
+ * @param budget - maximum display width including the ellipsis.
+ * @returns the truncated text.
+ */
+export function truncateVisible(text: string, budget: number): string {
+  if (visibleWidth(text) <= budget) return text
+  let out = ''
+  let width = 0
+  for (const char of text) {
+    const advance = WIDE_CHAR.test(char) ? 2 : 1
+    if (width + advance > budget - 1) break
+    out += char
+    width += advance
+  }
+  return out + '…'
+}

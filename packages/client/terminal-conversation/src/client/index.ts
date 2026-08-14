@@ -19,7 +19,7 @@ import {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, describeToolCall, dsBlue, dsDim, renderBanner, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, describeToolCall, dsBlue, dsDim, renderBanner, sgr, SGR, truncateVisible } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 
 /** Stable Cordis plugin name. */
@@ -283,7 +283,7 @@ export function apply(ctx: Context): void {
     const trimmed = text.replace(/^\n+/, '').replace(/\n+$/, '')
     if (trimmed === '') return []
     const budget = Math.max(20, terminal.width - 4)
-    const lines = trimmed.split('\n').map(line => line.length > budget ? line.slice(0, budget - 1) + '…' : line)
+    const lines = trimmed.split('\n').map(line => truncateVisible(line, budget))
     return thinkingMode === 'full' ? lines : lines.slice(-THINKING_TAIL_LINES)
   }
   const liveStateFor = (snapshot: ConversationSnapshot): { label: string; reasoningText: string } | null => {
@@ -298,7 +298,10 @@ export function apply(ctx: Context): void {
     if (snapshot.runningCalls.length > 0) {
       const shown = snapshot.runningCalls.slice(0, 2).map(call => call.name + callSuffix(call))
       const more = snapshot.runningCalls.length - shown.length
-      return { label: shown.join('  ·  ') + (more > 0 ? '  ·  +' + String(more) : ''), reasoningText: '' }
+      const label = shown.join('  ·  ') + (more > 0 ? '  ·  +' + String(more) : '')
+      // The live line stays one row: long commands truncate to the width
+      // instead of wrapping and flooding the transcript.
+      return { label: truncateVisible(label, Math.max(20, terminal.width - 8)), reasoningText: '' }
     }
     return null
   }

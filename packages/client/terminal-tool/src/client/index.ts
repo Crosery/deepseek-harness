@@ -10,16 +10,13 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, describeToolCall, dsBlue, dsDim, dsGreen, dsRed, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, describeToolCall, dsBlue, dsDim, dsGreen, dsRed, truncateVisible, visibleWidth } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-tool'
 
 /** Required services. */
 export const inject = ['terminal']
-
-/** Cap for inline result preview characters (the session log keeps the full text). */
-const PREVIEW_CHARS = 2000
 
 /** Duration between paired call and result, formatted as omp-style meta. */
 export function durationOf(node: ToolResultNode): string {
@@ -34,15 +31,6 @@ function textOf(blocks: readonly { type?: string; text?: unknown }[]): string {
     .filter(block => block.type === 'text')
     .map(block => typeof block.text === 'string' ? block.text : '')
     .join('')
-}
-
-/** Preview one text body (dimmed, capped, indented by tree depth). */
-function preview(terminal: TerminalService, text: string, indent: string): void {
-  if (text.trim() === '') return
-  const capped = text.length > PREVIEW_CHARS ? text.slice(0, PREVIEW_CHARS) + ' …' : text
-  for (const line of capped.split('\n')) {
-    terminal.print(ansiEnabled ? sgr(SGR.dim, indent + '  ' + line) : indent + '  ' + line)
-  }
 }
 
 /** The rendered body for one render-intent view, falling back to raw content. */
@@ -82,44 +70,71 @@ export function viewBody(node: ToolResultNode): string {
   return textOf(node.content)
 }
 
+/** One box row: dim borders, content padded to the inner width. */
+function boxRow(inner: number, themed: string, plain: string): string {
+  const content = ansiEnabled ? themed : plain
+  return dsDim('│ ') + content + ' '.repeat(Math.max(0, inner - 2 - visibleWidth(content))) + dsDim(' │')
+}
+
 /**
- * Render one tool-call row, omp-style: a `✓ name: label · 0.5s` header
- * with a dim preview of the render-intent content, then any nested
- * subcalls indented below (the web renders the same recursive tree).
+ * Render one tool-call row inside the card frame, omp-style: the tool
+ * name sits on the top border, the row carries the status icon, the
+ * flattened one-line label, and the duration; the render-intent preview
+ * follows dim, then any nested subcalls indent deeper (the web renders
+ * the same recursive tree).
  * @param terminal - the output seam.
  * @param block - the running or settled call.
  * @param depth - nesting depth (root is 0).
+ * @param inner - the box inner width in columns.
  */
-function renderCallRow(terminal: TerminalService, block: ToolCallBlock, depth: number): void {
+function renderCallRow(terminal: TerminalService, block: ToolCallBlock, depth: number, inner: number): void {
   const indent = '  '.repeat(depth)
   if (!('kind' in block)) {
     // A running subcall inside a settled tree (interrupted run): pending marker.
-    const label = describeToolCall(block.argsRaw, block.callView)
+    const budget = Math.max(10, inner - visibleWidth(indent) - 4)
+    const label = truncateVisible(describeToolCall(block.argsRaw, block.callView), budget)
     const plain = indent + '… ' + block.name + (label === '' ? '' : ': ' + label)
-    terminal.print(ansiEnabled ? dsDim(plain) : plain)
+    terminal.print(boxRow(inner, dsDim(plain), plain))
     return
   }
   const node = block
   const name = node.call?.name ?? 'tool'
-  const label = describeToolCall(node.call?.argsRaw ?? '', node.callView)
-  const head = indent + (node.isError ? '✗' : '✓') + ' ' + name + (label === '' ? '' : ': ' + label) + durationOf(node)
-  terminal.print(ansiEnabled
-    ? indent + (node.isError ? dsRed('✗') : dsGreen('✓')) + ' ' + dsBlue(name)
-      + (label === '' ? '' : ': ' + dsDim(label)) + dsDim(durationOf(node))
-    : head)
+  const budget = Math.max(10, inner - visibleWidth(indent) - visibleWidth(name) - 16)
+  const label = truncateVisible(describeToolCall(node.call?.argsRaw ?? '', node.callView), budget)
+  const plainHead = indent + (node.isError ? '✗' : '✓') + ' ' + name + (label === '' ? '' : ': ' + label) + durationOf(node)
+  const themedHead = indent + (node.isError ? dsRed('✗') : dsGreen('✓')) + ' ' + dsBlue(name)
+    + (label === '' ? '' : ': ' + dsDim(label)) + dsDim(durationOf(node))
+  terminal.print(boxRow(inner, themedHead, plainHead))
   const error = node.error
   if (error !== undefined) {
-    terminal.print(ansiEnabled ? dsDim(indent + '  (' + error.code + ')') : indent + '  (' + error.code + ')')
+    const plain = indent + '  (' + error.code + ')'
+    terminal.print(boxRow(inner, dsDim(plain), plain))
   }
-  preview(terminal, viewBody(node), indent)
+  const contentBudget = Math.max(10, inner - visibleWidth(indent) - 2)
+  for (const line of viewBody(node).split('\n')) {
+    if (line.trim() === '') continue
+    const plain = indent + '  ' + truncateVisible(line, contentBudget)
+    terminal.print(boxRow(inner, dsDim(plain), plain))
+  }
   for (const subCall of node.subCalls ?? []) {
-    renderCallRow(terminal, subCall, depth + 1)
+    renderCallRow(terminal, subCall, depth + 1, inner)
   }
 }
 
-/** Render one settled tool-result node (the root of its subcall tree). */
+/** The box inner width: terminal columns minus borders, capped like omp. */
+const BOX_MAX = 96
+
+/** Render one settled tool-result node as a framed card (omp output block). */
 function renderToolResult(terminal: TerminalService, raw: unknown): void {
-  renderCallRow(terminal, raw as ToolResultNode, 0)
+  const node = raw as ToolResultNode
+  const name = node.call?.name ?? 'tool'
+  const inner = Math.min(BOX_MAX, terminal.width - 2) - 2
+  const nameBudget = Math.max(6, inner - 6)
+  const title = truncateVisible(name, nameBudget)
+  const top = dsDim('╭─ ') + title + dsDim(' ' + '─'.repeat(Math.max(0, inner - 3 - visibleWidth(title))) + '╮')
+  terminal.print(top)
+  renderCallRow(terminal, node, 0, inner)
+  terminal.print(dsDim('╰' + '─'.repeat(inner) + '╯'))
 }
 
 /**
