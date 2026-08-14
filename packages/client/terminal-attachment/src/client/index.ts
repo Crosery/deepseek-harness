@@ -34,7 +34,7 @@ const MEDIA_TYPES: Readonly<Record<string, 'image/png' | 'image/jpeg' | 'image/w
  */
 export function apply(ctx: Context): void {
   const terminal = ctx.terminal
-  const sessions = ctx.get('sessions') as SessionRuntime
+  const sessions = ctx.get('sessions') as unknown as SessionRuntime
   let currentId: SessionId | undefined
 
   const disposeBinding = subscribeCurrentSession(sessions, () => {

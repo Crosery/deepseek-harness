@@ -10,7 +10,9 @@ import { ansiEnabled, sgr, SGR } from './ansi.ts'
 
 /** Render one inline span: strong, emphasis, and inline code. */
 function renderInline(text: string): string {
-  if (!ansiEnabled) return text
+  if (!ansiEnabled) {
+    return text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(^|[^*])\*([^*]+)\*/g, '$1$2').replace(/`([^`]+)`/g, '$1')
+  }
   return text
     .replace(/\*\*([^*]+)\*\*/g, (_, body: string) => sgr(SGR.bold, body))
     .replace(/(^|[^*])\*([^*]+)\*/g, (_, lead: string, body: string) => lead + sgr(SGR.italic, body))
@@ -40,34 +42,34 @@ export class AnsiMarkdown {
    */
   renderLine(line: string): string {
     if (this.state.inFence) {
-      if (/^s*```/.test(line)) {
+      if (/^\s*```/.test(line)) {
         this.state.inFence = false
         this.state.fenceInfo = ''
-        return ansiEnabled ? sgr(SGR.dim, '--') : ''
+        return ansiEnabled ? sgr(SGR.dim, '--') : '--'
       }
       return ansiEnabled ? sgr(SGR.dim, line) : line
     }
-    const fence = /^s*(```|~~~)(.*)$/.exec(line)
+    const fence = /^\s*(```|~~~)(.*)$/.exec(line)
     if (fence !== null) {
       this.state.inFence = true
       this.state.fenceInfo = (fence[2] ?? '').trim()
       const label = this.state.fenceInfo === '' ? 'code' : this.state.fenceInfo
       return ansiEnabled ? sgr(SGR.dim, '-- ' + label) : '-- ' + label
     }
-    const heading = /^(#{1,4})s+(.*)$/.exec(line)
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line)
     if (heading !== null) {
       return ansiEnabled ? sgr(SGR.bold, heading[2] ?? '') : (heading[2] ?? '')
     }
-    if (/^s{0,3}([-*+])s+/.test(line)) {
-      return '  • ' + renderInline(line.replace(/^s{0,3}[-*+]s+/, ''))
+    if (/^\s{0,3}([-*+])\s+/.test(line)) {
+      return '  • ' + renderInline(line.replace(/^\s{0,3}[-*+]\s+/, ''))
     }
-    if (/^s*d+.s+/.test(line)) {
+    if (/^\s*\d+\.\s+/.test(line)) {
       return '  ' + renderInline(line.trim())
     }
-    if (/^s*>/.test(line)) {
-      return renderInline(line.replace(/^s*>s?/, '  │ '))
+    if (/^\s*>/.test(line)) {
+      return renderInline(line.replace(/^\s*>\s?/, '  │ '))
     }
-    if (/^s{0,3}(---+|===+)s*$/.test(line)) {
+    if (/^\s{0,3}(---+|===+)\s*$/.test(line)) {
       return ansiEnabled ? sgr(SGR.dim, '────────') : '--------'
     }
     return renderInline(line)

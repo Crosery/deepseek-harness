@@ -37,7 +37,7 @@ interface CommandHelp {
  */
 export function apply(ctx: Context): void {
   const terminal = ctx.terminal
-  const sessions = ctx.get('sessions') as SessionRuntime
+  const sessions = ctx.get('sessions') as unknown as SessionRuntime
   const connection = ctx.get('connection') as ConnectionHandle
 
   const help: Record<string, CommandHelp> = {

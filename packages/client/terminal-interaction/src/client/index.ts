@@ -51,31 +51,52 @@ function renderWait(terminal: TerminalService, wait: PendingInteraction): void {
   }
 }
 
+/** The domain wire result one approval answer encodes. */
+export interface ApprovalAnswerResult {
+  ok: true
+  value: {
+    sessionId: PendingInteraction['sessionId']
+    approvalId: string
+    outcome: 'allowed-once' | 'rejected'
+  }
+}
+
 /**
- * Encode an approval answer in the domain wire shape.
+ * Encode an approval answer in the domain wire shape (pure).
  * @param wait - the pending approval wait.
  * @param allowed - whether the user allowed the request.
+ * @returns the respond() result shell.
  */
-function approvalAnswer(wait: PendingInteraction & { kind: 'approval' }, allowed: boolean): void {
-  void wait.respond({
+export function approvalAnswerResult(wait: PendingInteraction & { kind: 'approval' }, allowed: boolean): ApprovalAnswerResult {
+  return {
     ok: true,
     value: {
       sessionId: wait.sessionId,
       approvalId: wait.payload.approvalId,
-      outcome: allowed ? 'allowed-once' as const : 'rejected' as const,
+      outcome: allowed ? 'allowed-once' : 'rejected',
     },
-  })
+  }
+}
+
+/** The domain wire result one question answer encodes, or undefined without questions. */
+export interface QuestionAnswerResult {
+  ok: true
+  value: {
+    sessionId: PendingInteraction['sessionId']
+    answer: { answers: { id: string; selected: string[]; custom?: string }[] }
+  }
 }
 
 /**
- * Encode a question answer in the domain wire shape.
+ * Encode a question answer in the domain wire shape (pure).
  * @param wait - the pending question wait.
  * @param line - the raw answer line.
+ * @returns the respond() result shell, or undefined when the wait carries no questions.
  */
-function questionAnswer(wait: PendingInteraction & { kind: 'question' }, line: string): void {
+export function questionAnswerResult(wait: PendingInteraction & { kind: 'question' }, line: string): QuestionAnswerResult | undefined {
   const questions = wait.payload.questions
   const first = questions[0]
-  if (first === undefined) return
+  if (first === undefined) return undefined
   const trimmed = line.trim()
   let selected: string[] = []
   let custom: string | undefined
@@ -89,13 +110,32 @@ function questionAnswer(wait: PendingInteraction & { kind: 'question' }, line: s
   } else {
     custom = line
   }
-  void wait.respond({
+  return {
     ok: true,
     value: {
       sessionId: wait.sessionId,
       answer: { answers: [{ id: first.id, selected, ...(custom === undefined ? {} : { custom }) }] },
     },
-  })
+  }
+}
+
+/**
+ * Encode an approval answer and send it through the wait.
+ * @param wait - the pending approval wait.
+ * @param allowed - whether the user allowed the request.
+ */
+function approvalAnswer(wait: PendingInteraction & { kind: 'approval' }, allowed: boolean): void {
+  void wait.respond(approvalAnswerResult(wait, allowed))
+}
+
+/**
+ * Encode a question answer and send it through the wait.
+ * @param wait - the pending question wait.
+ * @param line - the raw answer line.
+ */
+function questionAnswer(wait: PendingInteraction & { kind: 'question' }, line: string): void {
+  const result = questionAnswerResult(wait, line)
+  if (result !== undefined) void wait.respond(result)
 }
 
 /**

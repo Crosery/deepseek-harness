@@ -13,6 +13,7 @@ export class InputReader {
   private rl: readline.Interface | undefined
   private readonly sigintListeners = new Set<() => void>()
   private readonly closeListeners = new Set<() => void>()
+  private started = false
   private closed = false
 
   /** Serialized handler chain: each line waits for the previous handler. */
@@ -34,7 +35,9 @@ export class InputReader {
    * @param onLine - the line handler.
    */
   start(onLine: (line: string) => void | Promise<void>): void {
+    if (this.started) throw new Error('terminal: input reader already started')
     if (this.closed) throw new Error('terminal: input reader already closed')
+    this.started = true
     const rl = readline.createInterface({
       input: this.stdin,
       output: this.writer.isTTY ? process.stdout : undefined,

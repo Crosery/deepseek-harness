@@ -230,4 +230,4 @@ Assembler 会记录这项依赖。如果后续 older prepend 带来了更近的�
 5. 重复的可见 delta 保持 `context.key`，并在请求 `animation-frame` 时每帧最多发布一次。
 6. keyed renderer 只消费 `node.data` 与受限 Location hook，不扫描 Session 事件窗口、Context 或 Chat Node。
 
-流式与中断处理可参考 [`packages/client/ui-conversation/src/client/conversation-nodes/assistant.ts`](../../packages/client/ui-conversation/src/client/conversation-nodes/assistant.ts)，前序查询可参考 [`inbox.ts`](../../packages/client/ui-conversation/src/client/conversation-nodes/inbox.ts) 与 [`message.ts`](../../packages/client/ui-conversation/src/client/conversation-nodes/message.ts)，只发布 Turn data 而不创建自有 Node 的例子见 [`packages/client/ui-deliverables`](../../packages/client/ui-deliverables)。
+流式与中断处理可参考 [`packages/client/runtime/src/client/chat/assistant.ts`](../../packages/client/runtime/src/client/chat/assistant.ts)，前序查询可参考 [`inbox.ts`](../../packages/client/runtime/src/client/chat/inbox.ts) 与 [`message.ts`](../../packages/client/runtime/src/client/chat/message.ts)，只发布 Turn data 而不创建自有 Node 的例子见 [`packages/client/ui-deliverables`](../../packages/client/ui-deliverables)。

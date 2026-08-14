@@ -59,6 +59,34 @@ interface DeliverablesTurnData {
 }
 
 /**
+ * Build the status-line parts from the projection and mirror facts (pure).
+ * @param goal - the goal projection value (or null/undefined when absent).
+ * @param plan - the plan projection value (or null/undefined when absent).
+ * @param jobs - the session's job mirror.
+ * @param subagents - the session's subagent mirror.
+ * @returns the parts, joined by the caller with a separator.
+ */
+export function statusParts(
+  goal: GoalSnapshot | null | undefined,
+  plan: PlanSnapshot | null | undefined,
+  jobs: readonly JobView[],
+  subagents: readonly SubagentMirrorEntry[],
+): string[] {
+  const parts: string[] = []
+  if (goal !== null && goal !== undefined && typeof goal.phase === 'string' && goal.phase !== 'idle' && goal.phase !== 'complete') {
+    parts.push('goal: ' + goal.phase + (typeof goal.objective === 'string' ? ' "' + goal.objective.slice(0, 60) + '"' : ''))
+    if (goal.blockedReason !== undefined) parts.push('blocked: ' + goal.blockedReason.code)
+  }
+  if (plan !== null && plan !== undefined && plan.active) parts.push('plan mode')
+  if (jobs.length > 0) {
+    const running = jobs.filter(job => job.status === 'running').length
+    parts.push('jobs: ' + String(running) + ' running / ' + String(jobs.length) + ' total')
+  }
+  if (subagents.length > 0) parts.push('subagents: ' + String(subagents.length))
+  return parts
+}
+
+/**
  * Status plugin body: bind the current session and print the status line.
  * @param ctx - terminal client cordis context.
  */
@@ -69,24 +97,13 @@ export function apply(ctx: Context): void {
   let unsubscribe: (() => void) | undefined
 
   const statusLine = (face: SessionFace): string => {
-    const parts: string[] = []
     const goal = face.projections.faceOf('goal').getSnapshot() as GoalSnapshot | null | undefined
-    if (goal !== null && goal !== undefined && typeof goal.phase === 'string' && goal.phase !== 'idle' && goal.phase !== 'complete') {
-      parts.push('goal: ' + goal.phase + (typeof goal.objective === 'string' ? ' "' + goal.objective.slice(0, 60) + '"' : ''))
-      if (goal.blockedReason !== undefined) parts.push('blocked: ' + goal.blockedReason.code)
-    }
     const plan = face.projections.faceOf('plan').getSnapshot() as PlanSnapshot | null | undefined
-    if (plan !== null && plan !== undefined &&  plan.active) parts.push('plan mode')
     const snapshot = sessions.list.getSnapshot()
     const jobs = (snapshot.jobsBySession as Record<string, readonly JobView[]>)[String(face.sessionId)] ?? []
-    if (jobs.length > 0) {
-      const running = jobs.filter(job => job.status === 'running').length
-      parts.push('jobs: ' + String(running) + ' running / ' + String(jobs.length) + ' total')
-    }
     const subagentMap = snapshot.subagentsByParent as unknown as Record<string, readonly SubagentMirrorEntry[]>
     const subagents = subagentMap[String(face.sessionId)] ?? []
-    if (subagents.length > 0) parts.push('subagents: ' + String(subagents.length))
-    return parts.join('  |  ')
+    return statusParts(goal, plan, jobs, subagents).join('  |  ')
   }
 
   const renderedWorkflows = new Map<string, string>()

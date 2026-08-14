@@ -306,7 +306,7 @@ Unknown fallback demonstrates Registry ownership: it handles only append-surface
 
 The Assembler calls `replace({ nodes, timeline })` on low-frequency complete replacements and `apply({ upserts, timeline })` for ordinary prepend/append flushes. Builders receive only final target Nodes already constructed by Definitions.
 
-[`ChatSnapshotBuilder`](../../../../packages/client/ui-conversation/src/client/conversation-nodes/chat-snapshot-builder.ts) maintains `order`, a keyed `nodes` store, the turn/step `locations` index, `timeline`, and the `legacy` slice used by StatsLine and mirrored into top-level public compatibility fields.
+[`ChatSnapshotBuilder`](../../../../packages/client/runtime/src/client/chat/chat-snapshot-builder.ts) maintains `order`, a keyed `nodes` store, the turn/step `locations` index, `timeline`, and the `legacy` slice used by StatsLine and mirrored into top-level public compatibility fields.
 
 Only a new key or a change to `anchorSeq`, visibility, or Location identity makes a Chat update structural. An ordinary content change does not rebuild `order`; the keyed Node store replaces only that key's value.
 

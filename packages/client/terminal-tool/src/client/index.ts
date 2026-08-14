@@ -22,7 +22,7 @@ export const inject = ['terminal']
 const PREVIEW_CHARS = 2000
 
 /** Duration between paired call and result, formatted as seconds. */
-function durationOf(node: ToolResultNode): string {
+export function durationOf(node: ToolResultNode): string {
   if (node.callTime === null) return ''
   const seconds = (node.time - node.callTime) / 1000
   return seconds >= 0 ? ' (' + seconds.toFixed(1) + 's)' : ''
@@ -46,7 +46,7 @@ function preview(terminal: TerminalService, text: string): void {
 }
 
 /** The rendered body for one render-intent view, falling back to raw content. */
-function viewBody(node: ToolResultNode): string {
+export function viewBody(node: ToolResultNode): string {
   const view = node.resultView
   if (view !== null) {
     switch (view.card) {

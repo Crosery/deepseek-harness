@@ -306,7 +306,7 @@ Unknown fallback 展示了 Registry ownership：fallback 只处理没有任何�
 
 Assembler 低频完整替换时调用 `replace({ nodes, timeline })`；普通 prepend/append flush 调用 `apply({ upserts, timeline })`。Builder 只接收 Definition 已构造完成的 target Nodes。
 
-[`ChatSnapshotBuilder`](../../../../packages/client/ui-conversation/src/client/conversation-nodes/chat-snapshot-builder.ts) 维护 `order`、keyed `nodes` store、turn/step `locations` index、`timeline`，以及由 StatsLine 使用并镜像到顶层公共兼容字段的 `legacy` slice。
+[`ChatSnapshotBuilder`](../../../../packages/client/runtime/src/client/chat/chat-snapshot-builder.ts) 维护 `order`、keyed `nodes` store、turn/step `locations` index、`timeline`，以及由 StatsLine 使用并镜像到顶层公共兼容字段的 `legacy` slice。
 
 Chat 结构变化只由新 key、`anchorSeq`、visibility 或 Location identity 变化触发。普通内容变化不重建 `order`；keyed Node store 只替换该 key 的 value。
 

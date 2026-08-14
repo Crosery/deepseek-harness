@@ -6,8 +6,6 @@
  * @module @deepseek-ai/dsh-client-terminal/output
  */
 
-import { ansiEnabled } from './ansi.ts'
-
 /** One line-writer bound to a stream (stdout for the terminal plane). */
 export class TerminalWriter {
   /**
@@ -38,20 +36,20 @@ export class TerminalWriter {
   }
 
   /**
-   * Write one transient status line (dimmed when colors are on).
+   * Write one transient status line (dimmed when the stream is a TTY).
    * @param text - status text.
    */
   status(text: string): void {
-    if (!ansiEnabled) {
+    if (!this.isTTY) {
       this.print(text)
       return
     }
     this.print('\u001b[2m' + text + '\u001b[0m')
   }
 
-  /** Clear the current line (raw ANSI; no-op when colors are off). */
+  /** Clear the current line (raw ANSI; no-op when the stream is not a TTY). */
   clearLine(): void {
-    if (!ansiEnabled) return
+    if (!this.isTTY) return
     this.stream.write('\r\u001b[K')
   }
 }
