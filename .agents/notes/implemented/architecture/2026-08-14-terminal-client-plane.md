@@ -31,7 +31,7 @@ The conversation-node definitions and chat snapshot builder moved from `packages
 - live command hints: typing / or \ opens a filtered menu under the input (client commands, host commands, session skills), cursor on the first match, descriptions beside each row; both prefixes dispatch identically
 - tool cards: a live braille activity line while calls run (one dim pending row per call in piped runs), then an omp-style `✓ name: label · 0.5s` card with the render-intent preview (terminal/diff/search/read/web/generic) and nested subcalls indented below
 - approvals + ask_user_question inline prompts (answer-mode input)
-- steered messages (`↪` user rows), injected/recalled context (`▸`/`↩` dim rows with producer label), model retries (`↻` dim notices), and a dim per-message usage footer (`↑ billed ↓ output · latency · ttft`)
+- steered messages (`↪` user rows), injected/recalled context (collapsed `▸`/`↩` rows: first line + a count of the rest, with producer label), model retries (`↻` dim notices), and a dim per-message usage footer (`↑ billed ↓ output · latency · ttft`)
 - slash commands: client /help /sessions /new /model /like /dislike /memory /quit; host /plan /goal /compact /permission /feedback /export pass through
 - goal bar, plan chip, jobs and subagent status line (host projections)
 - image attachments via `@path/to/image.png` expansion
@@ -46,6 +46,8 @@ The transcript is line-oriented, not a full-screen TUI: the kernel owns the sing
 Streaming partials rewrite in place: the streamed tail is always the full current line, and a delta first piece completes the previous line as `previousTail + piece` — never the lone fragment, which would erase the accumulated prefix on the next clear. Empty delta lines advance the cursor without printing a cleared blank row.
 
 Tool activity rides one shared live line: `liveLabelFor(snapshot)` picks `thinking…` while a reasoning partial streams, then the running calls from `snapshot.runningCalls` (`describeToolCall` in the terminal kernel builds the label from the call view title or the salient argument). The line stops before nodes print so settled cards land on the cleared row; piped runs record each call once as a dim pending row instead.
+
+Turns render as separate blocks: user/steering rows start a human block (a blank line after the previous model block), context rows attach inside it collapsed to one teaser line, and the first assistant row closes it with one blank line. The kernel debounces the prompt redraw by 25 ms so a burst of settled rows does not flash the prompt between them.
 
 ## Memory and startup (measured, macOS arm64, Node 24)
 

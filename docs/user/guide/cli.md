@@ -27,7 +27,7 @@ Typing `/` or `\` opens the live command menu under the input: client commands, 
 
 Tool calls render like the web: a live braille activity line while they run (one dim pending row per call in piped runs), then an omp-style card — `✓ name: label · 0.5s` with a dimmed preview of the render-intent output (terminal text, diff hunks, search matches, read content, web output) and nested subcalls indented below. Command outcomes print under their `⌘` line as `✓`/`✗` rows.
 
-Steered messages appear as user rows with a `↪` marker, injected or recalled context as dim `▸`/`↩` rows with the producer label, and model retries as dim `↻` notices. Each assistant message ends with a dim footer — `↑ 8.8k ↓ 63 · 2.0s · ttft 1.0s` — the billed tokens, latency, and time-to-first-token, like the web's stats and omp's footer.
+Steered messages appear as user rows with a `↪` marker, injected or recalled context as collapsed dim `▸`/`↩` rows (the first content line plus a count of the rest) with the producer label, and model retries as dim `↻` notices. Each assistant message ends with a dim footer — `↑ 8.8k ↓ 63 · 2.0s · ttft 1.0s` — the billed tokens, latency, and time-to-first-token, like the web's stats and omp's footer. The human block (message plus its context rows) and the model block (pulse, answer, footer) are separated by a blank line, so each turn reads as its own block.
 
 ## Memory
 

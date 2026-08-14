@@ -173,16 +173,22 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
       return
     }
     case 'context': {
-      // Producer-supplied context or recalled memory: dim rows with the
-      // source marker (↩ recall, ▸ inject) and producer label.
-      const text = textOf(node.content)
-      if (text.trim() === '') return
+      // Producer-supplied context or recalled memory renders collapsed by
+      // default (the web folds the same row): one dim line with the source
+      // marker, producer label, the first content line, and a count for the
+      // rest — the full injection never floods the transcript.
+      const text = textOf(node.content).replace(/^\n+/, '').replace(/\n+$/, '')
+      if (text === '') return
       const provenance = node.provenance as { role?: string; label?: string | null } | undefined
       const marker = provenance?.role === 'recall' ? '↩ ' : '▸ '
       const label = provenance?.label == null || provenance.label === '' ? '' : provenance.label + ': '
-      for (const line of text.split('\n')) {
-        terminal.print(ansiEnabled ? dsDim(marker + label + line) : marker + label + line)
-      }
+      const lines = text.split('\n')
+      const first = lines.shift() ?? ''
+      const more = lines.length
+      const budget = Math.max(20, terminal.width - marker.length - label.length - 10)
+      const teaser = first.length > budget ? first.slice(0, budget - 1) + '…' : first
+      const tail = more > 0 ? '  (+' + String(more) + ' more lines)' : ''
+      terminal.print(ansiEnabled ? dsDim(marker + label + teaser + tail) : marker + label + teaser + tail)
       return
     }
     case 'model-retry': {
@@ -220,6 +226,8 @@ export function apply(ctx: Context): void {
   let currentId: SessionId | undefined
   let unsubscribe: (() => void) | undefined
   let printedNodes = 0
+  let transcriptHasContent = false
+  let afterHuman = false
   let partialText = ''
   let streamed: StreamedState | undefined
   let lastRunning = false
@@ -354,7 +362,22 @@ export function apply(ctx: Context): void {
     if (live === null) stopLive()
     const nodes = snapshot.nodes
     for (let index = printedNodes; index < nodes.length; index += 1) {
-      renderNode(terminal, nodes[index] as ConversationNode, streamed)
+      const node = nodes[index] as ConversationNode
+      // Block separation: user/steering rows start a human block (blank line
+      // after the previous model block), context rows attach inside it, and
+      // the first assistant row closes it with one blank line — the user and
+      // model blocks read as separate turns.
+      if (node.kind === 'user' || node.kind === 'steering') {
+        if (transcriptHasContent) terminal.print()
+        afterHuman = true
+      } else if (node.kind === 'assistant' && afterHuman) {
+        terminal.print()
+        afterHuman = false
+      } else if (node.kind !== 'context') {
+        afterHuman = false
+      }
+      renderNode(terminal, node, streamed)
+      transcriptHasContent = true
     }
     printedNodes = nodes.length
     if (snapshot.partial === null && partialText === '' && streamed !== undefined) streamed = undefined
@@ -436,6 +459,8 @@ export function apply(ctx: Context): void {
       unsubscribe = undefined
     }
     printedNodes = 0
+    transcriptHasContent = false
+    afterHuman = false
     partialText = ''
     lastRunning = false
     seenRunningCalls = new Set<string>()

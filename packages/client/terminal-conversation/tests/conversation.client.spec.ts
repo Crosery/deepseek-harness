@@ -178,6 +178,40 @@ describe('terminal-conversation plugin', () => {
     expect(transcript).not.toContain('cancelled')
   })
 
+  it('collapses multi-line context rows to one teaser line', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({
+      nodes: [{
+        kind: 'context',
+        seq: 1,
+        time: 0,
+        content: [{ type: 'text', text: 'line one\nline two\nline three' }],
+        source: {},
+        provenance: { role: 'inject', label: 'system' },
+        form: null,
+      }],
+    })
+    const row = stub.output.find(line => line.includes('line one'))
+    expect(row).toContain('▸ system: line one')
+    expect(row).toContain('(+2 more lines)')
+    expect(stub.output.join('')).not.toContain('line two')
+  })
+
+  it('separates the human block from the model block with a blank line', async () => {
+    const { stub, setCurrent, emit } = await boot({ task: undefined })
+    setCurrent('session-1')
+    emit({
+      nodes: [
+        { kind: 'user', seq: 1, time: 0, content: [{ type: 'text', text: 'hello' }], source: {} },
+        { kind: 'assistant', seq: 2, messageId: 'm1', time: 1, turn: 1, step: 1, blocks: [{ kind: 'text', text: 'hi there' }] },
+        { kind: 'user', seq: 3, time: 2, content: [{ type: 'text', text: 'again' }], source: {} },
+      ],
+    })
+    const transcript = stub.output.join('\n')
+    expect(transcript).toContain('> hello\n\nhi there\n\n> again')
+  })
+
   it('prints the dim usage and timing footer after an assistant message', async () => {
     const { stub, setCurrent, emit } = await boot({ task: undefined })
     setCurrent('session-1')

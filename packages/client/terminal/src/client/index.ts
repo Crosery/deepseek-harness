@@ -215,6 +215,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
   let hintLines = 0
   let hintBufferDispose: (() => void) | undefined
   let promptDirty = false
+  let promptRedrawTimer: ReturnType<typeof setTimeout> | undefined
   // The hint menu borrows omp's select-list look: a dim rounded box under the
   // input, a blue cursor on the first match, dim descriptions, and a dim
   // footer. Readline keeps owning the editor; the menu only ever previews.
@@ -259,6 +260,10 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     setPrompt: (text) => {
       currentPrompt = text
       promptDirty = false
+      if (promptRedrawTimer !== undefined) {
+        clearTimeout(promptRedrawTimer)
+        promptRedrawTimer = undefined
+      }
       if (started) input.setPrompt(text)
     },
     registerNodeRenderer: (kind, renderer) => {
@@ -298,10 +303,16 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     refreshPrompt: () => {
       // The prompt redraws only when output consumed its line since the last
       // draw — idle snapshot updates must not replay the prompt (no flicker,
-      // no erase of the line below).
+      // no erase of the line below). A short trailing debounce collapses a
+      // burst of settled rows into one redraw, so the prompt does not flash
+      // between rows of the same batch.
       if (!started || !promptDirty) return
-      input.setPrompt(currentPrompt)
       promptDirty = false
+      if (promptRedrawTimer !== undefined) clearTimeout(promptRedrawTimer)
+      promptRedrawTimer = setTimeout(() => {
+        promptRedrawTimer = undefined
+        input.setPrompt(currentPrompt)
+      }, 25)
     },
     onLine: (listener) => {
       lineListeners.add(listener)
