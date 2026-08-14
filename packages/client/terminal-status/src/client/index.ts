@@ -8,7 +8,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionRuntime, SessionFace } from '@deepseek-ai/dsh-client-runtime/client-node'
-import { subscribeCurrentSession } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { dsDim, subscribeCurrentSession } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-status'
@@ -143,7 +143,7 @@ export function apply(ctx: Context): void {
     const line = statusLine(face)
     if (line === lastLine) return
     lastLine = line
-    if (line !== '') terminal.status(line)
+    if (line !== '') terminal.status(dsDim(line))
   }
 
   const disposeBinding = subscribeCurrentSession(sessions, (face) => {

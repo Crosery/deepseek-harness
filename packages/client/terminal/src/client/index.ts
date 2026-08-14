@@ -14,9 +14,10 @@ import { AnsiMarkdown } from './markdown.ts'
 import { TerminalWriter } from './output.ts'
 import { InputReader } from './input.ts'
 
-export { ansiEnabled, sgr, SGR } from './ansi.ts'
+export { ansiEnabled, sgr, SGR, dsBlue, dsDim, rgb } from './ansi.ts'
 export { AnsiMarkdown } from './markdown.ts'
 export { subscribeCurrentSession } from './session-binding.ts'
+export { renderBanner } from './welcome.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -38,6 +39,13 @@ export interface TerminalService {
    * @param text - the text to write.
    */
   write(text: string): void
+  /**
+   * Write streamed mid-line text: clears the current input line first so
+   * the run never lands after the prompt (the caller redraws the prompt
+   * after the batch).
+   * @param text - the text to write.
+   */
+  stream(text: string): void
   /**
    * Write one complete line.
    * @param text - line content.
@@ -157,6 +165,7 @@ export function apply(ctx: Context, config: TerminalConfig): void {
     width: process.stdout.columns || 80,
     markdown: new AnsiMarkdown(),
     write: (text) => { writer.write(text) },
+    stream: (text) => { writer.writeStream(text) },
     print: (text) => { writer.print(text) },
     status: (text) => { writer.status(text) },
     setPrompt: (text) => {

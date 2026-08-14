@@ -37,3 +37,39 @@ export function sgr(code: number, text: string): string {
 
 /** Whether ANSI output is enabled for this process. */
 export const ansiEnabled =  process.stdout.isTTY && process.env.NO_COLOR === undefined && process.env.TERM !== 'dumb'
+
+/** The DeepSeek brand blue (RGB). */
+export const DEEPSEEK_BLUE = { r: 77, g: 107, b: 254 } as const
+
+/** A lighter reading blue for dimmed/secondary text. */
+export const DEEPSEEK_BLUE_SOFT = { r: 128, g: 148, b: 255 } as const
+
+/**
+ * Wrap text in a truecolor foreground.
+ * @param r - red channel (0-255).
+ * @param g - green channel (0-255).
+ * @param b - blue channel (0-255).
+ * @param text - the text the color applies to.
+ * @returns the wrapped text.
+ */
+export function rgb(r: number, g: number, b: number, text: string): string {
+  return '\u001b[38;2;' + r + ';' + g + ';' + b + 'm' + text + '\u001b[0m'
+}
+
+/**
+ * Wrap text in the DeepSeek brand blue when colors are on.
+ * @param text - the text to color.
+ * @returns the colored text (or the plain text without a TTY).
+ */
+export function dsBlue(text: string): string {
+  return ansiEnabled ? rgb(DEEPSEEK_BLUE.r, DEEPSEEK_BLUE.g, DEEPSEEK_BLUE.b, text) : text
+}
+
+/**
+ * Wrap text in the soft DeepSeek blue when colors are on (secondary text).
+ * @param text - the text to color.
+ * @returns the colored text (or the plain text without a TTY).
+ */
+export function dsDim(text: string): string {
+  return ansiEnabled ? rgb(DEEPSEEK_BLUE_SOFT.r, DEEPSEEK_BLUE_SOFT.g, DEEPSEEK_BLUE_SOFT.b, text) : text
+}

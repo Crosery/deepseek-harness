@@ -10,7 +10,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, dsBlue, dsDim, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 /** Stable Cordis plugin name. */
 export const name = 'terminal-tool'
@@ -89,7 +89,7 @@ function renderToolResult(terminal: TerminalService, raw: unknown): void {
   const status = node.isError ? ' ✗' : ' ✓'
   const head = '⚙ ' + name + status + durationOf(node)
   terminal.print(ansiEnabled
-    ? sgr(SGR.gray, '⚙ ' + name) + (node.isError ? ' ' + sgr(SGR.brightRed, '✗') : ' ' + sgr(SGR.green, '✓')) + sgr(SGR.gray, durationOf(node))
+    ? sgr(SGR.gray, '⚙ ' + name) + (node.isError ? ' ' + sgr(SGR.brightRed, '✗') : ' ' + dsBlue('✓')) + dsDim(durationOf(node))
     : head)
   preview(terminal, viewBody(node))
 }

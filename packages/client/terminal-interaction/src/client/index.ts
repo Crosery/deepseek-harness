@@ -11,7 +11,7 @@ import type { SessionFace } from '@deepseek-ai/dsh-client-runtime/client-node'
 import type { PendingInteraction } from '@deepseek-ai/dsh-client-runtime/client-node'
 import {
   subscribeCurrentSession,
-  ansiEnabled, sgr, SGR,
+  ansiEnabled, dsBlue, dsDim, sgr, SGR,
 } from '@deepseek-ai/dsh-client-terminal/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
 import type { SessionRuntime } from '@deepseek-ai/dsh-client-runtime/client-node'
@@ -24,7 +24,7 @@ export const inject = ['terminal', 'sessions']
 
 /** One rendered prompt line (option list marker). */
 function promptLine(terminal: TerminalService, text: string, accent: boolean): void {
-  terminal.print(accent && ansiEnabled ? sgr(SGR.brightYellow, '⏸ ' + text) : '⏸ ' + text)
+  terminal.print(accent && ansiEnabled ? dsBlue('⏸ ' + text) : '⏸ ' + text)
 }
 
 /** Render one pending wait's prompt. */
@@ -33,7 +33,7 @@ function renderWait(terminal: TerminalService, wait: PendingInteraction): void {
     const tool = wait.payload.toolName
     const reason = wait.payload.reason ?? ''
     promptLine(terminal, 'Allow ' + tool + (reason === '' ? '' : ' — ' + reason) + '?', true)
-    terminal.print(ansiEnabled ? sgr(SGR.dim, '  [y] allow once   [n] reject') : '  [y] allow once   [n] reject')
+    terminal.print(ansiEnabled ? dsDim('  [y] allow once   [n] reject') : '  [y] allow once   [n] reject')
     return
   }
   const questions = wait.payload.questions
@@ -156,7 +156,7 @@ export function apply(ctx: Context): void {
     pending = next
     if (next.length > 0) {
       for (const wait of next) renderWait(terminal, wait)
-      terminal.setPrompt(ansiEnabled ? sgr(SGR.brightYellow, '⏸ ') : '> ')
+      terminal.setPrompt(ansiEnabled ? dsBlue('⏸ ') : '> ')
     } else {
       terminal.setPrompt('❯ ')
     }

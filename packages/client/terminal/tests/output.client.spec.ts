@@ -24,6 +24,12 @@ describe('TerminalWriter', () => {
     expect(text()).toBe('x\ny')
   })
 
+  it('clears the input line before every write on a TTY', () => {
+    const { writer, text } = capture(true)
+    writer.print('a')
+    expect(text()).toBe('\r\u001b[Ka\n')
+  })
+
   it('degrades status to a plain line without a TTY', () => {
     const { writer, text } = capture(false)
     writer.status('busy')
@@ -33,7 +39,7 @@ describe('TerminalWriter', () => {
   it('wraps status in dim SGR on a TTY', () => {
     const { writer, text } = capture(true)
     writer.status('busy')
-    expect(text()).toBe('\u001b[2mbusy\u001b[0m\n')
+    expect(text()).toBe('\r\u001b[K\u001b[2mbusy\u001b[0m\n')
   })
 
   it('reports TTY-ness', () => {

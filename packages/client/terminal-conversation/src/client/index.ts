@@ -18,7 +18,7 @@ import {
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client-node'
 import type { TerminalService } from '@deepseek-ai/dsh-client-terminal/client-node'
-import { ansiEnabled, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
+import { ansiEnabled, dsBlue, dsDim, renderBanner, sgr, SGR } from '@deepseek-ai/dsh-client-terminal/client-node'
 
 
 /** Stable Cordis plugin name. */
@@ -62,7 +62,9 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
       const text = textOf(node.content)
       if (text.trim() === '') return
       for (const line of text.split('\n')) {
-        terminal.print((ansiEnabled ? sgr(SGR.green, '❯ ') : '> ') + line)
+        // A blue block marker keeps the transcript distinct from the raw
+        // submitted echo on the prompt line above it.
+        terminal.print((ansiEnabled ? dsBlue('▍ ') : '> ') + line)
       }
       return
     }
@@ -76,7 +78,7 @@ function renderNode(terminal: TerminalService, node: ConversationNode, streamed?
             text = text.slice(streamed.text.length)
           }
           if (text !== '') renderBlock(terminal, text)
-        } else if (block.kind === 'reasoning') renderBlock(terminal, (ansiEnabled ? sgr(SGR.dim, '· ') : '· ') + block.text)
+        } else if (block.kind === 'reasoning') renderBlock(terminal, (ansiEnabled ? dsDim('· ') : '· ') + block.text)
       }
       return
     }
@@ -217,7 +219,7 @@ export function apply(ctx: Context): void {
           terminal.print(terminal.markdown.renderLine(line))
         }
         const tail = lines[lines.length - 1] ?? ''
-        if (tail !== '') terminal.write(tail)
+        if (tail !== '') terminal.stream(tail)
       } else {
         if (partialText !== '') terminal.print()
         terminal.markdown.reset()
@@ -225,7 +227,7 @@ export function apply(ctx: Context): void {
           terminal.print(terminal.markdown.renderLine(line))
         }
         const tail = text.split('\n').at(-1) ?? ''
-        if (tail !== '') terminal.write(tail)
+        if (tail !== '') terminal.stream(tail)
       }
       partialText = text
       streamed = { turn: snapshot.partial.turn, step: snapshot.partial.step, text }
@@ -243,9 +245,12 @@ export function apply(ctx: Context): void {
       maybeExit()
     }
     lastRunning = snapshot.running
-    terminal.refreshPrompt()
+    // The prompt redraws only at settle points: while a partial streams, the
+    // input line stays hidden and the streamed run owns the line.
+    if (snapshot.partial === null) terminal.refreshPrompt()
   }
 
+  let bannerShown = false
   const bindSession = (id: SessionId | undefined): void => {
     if (unsubscribe !== undefined) {
       unsubscribe()
@@ -259,6 +264,15 @@ export function apply(ctx: Context): void {
     const binding = sessions.binding(id)
     if (binding === undefined) return
     const face: SessionFace = binding.session
+    // The pixel whale greets exactly one blank interactive session (never
+    // piped or print-mode runs, whose transcript must stay clean).
+    if (!bannerShown && terminal.isTTY && startup.task === undefined) {
+      bannerShown = true
+      if (face.getSnapshot().composerPhase === 'blank') {
+        for (const line of renderBanner()) terminal.print(line)
+        terminal.print()
+      }
+    }
     unsubscribe = face.subscribe(() => { renderDelta(face) })
     renderDelta(face)
     applyStartupOverrides(id, face)
@@ -302,6 +316,6 @@ export function apply(ctx: Context): void {
       closing = true
       maybeExit()
     })
-    terminal.setPrompt('❯ ')
+    terminal.setPrompt(ansiEnabled ? dsBlue('❯ ') : '❯ ')
   }
 }

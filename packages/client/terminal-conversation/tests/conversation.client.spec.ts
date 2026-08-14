@@ -16,6 +16,7 @@ function stubTerminal() {
       width: 80,
       markdown: { renderLine: (line: string) => line, reset: () => {} },
       write: (text: string) => { output.push(text) },
+      stream: (text: string) => { output.push(text) },
       print: (text = '') => { output.push(text) },
       status: (text: string) => { output.push(text) },
       setPrompt: () => {},

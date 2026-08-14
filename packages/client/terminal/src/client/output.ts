@@ -19,11 +19,13 @@ export class TerminalWriter {
   }
 
   /**
-   * Write raw text (may contain newlines and ANSI escapes).
+   * Write raw text (may contain newlines and ANSI escapes). On a TTY the
+   * current input line clears first, so output never lands after the prompt.
    * @param text - the text to write.
    */
   write(text: string): void {
     if (text === '') return
+    if (this.isTTY) this.stream.write('\r\u001b[K')
     this.stream.write(text)
   }
 
@@ -32,7 +34,7 @@ export class TerminalWriter {
    * @param text - line content (no newline).
    */
   print(text = ''): void {
-    this.stream.write(text + '\n')
+    this.write(text + '\n')
   }
 
   /**
@@ -51,5 +53,17 @@ export class TerminalWriter {
   clearLine(): void {
     if (!this.isTTY) return
     this.stream.write('\r\u001b[K')
+  }
+
+  /**
+   * Write streamed mid-line text: clears the current input line first so the
+   * streamed run never lands after the prompt, then writes the text. The
+   * caller redraws the prompt afterwards.
+   * @param text - the text to write.
+   */
+  writeStream(text: string): void {
+    // Identical clearing semantics to write(); the separate method documents
+    // the streaming call site's contract (the caller redraws the prompt).
+    this.write(text)
   }
 }
